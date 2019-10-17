@@ -24,7 +24,7 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 - option to Blast against custom database with Galaxy
 
 ## Aditional remarks
-### Projects related to
+### Related projects:
 - [B19009-560](https://docs.google.com/spreadsheets/d/1ZPdazHaaNi29q7tpruxqp_EYCcA-hNZnx6c2bqjQaq8/edit#gid=420939240) - Barcoding database status reporting tool (Applicant: A. Speksnijder)
 - [B19011-560](https://docs.google.com/spreadsheets/d/16KGTSKY5OtizeFCqsoc0rCyX7rQfVMGZabcmB-D2rkA/edit#gid=420939240) - Local custom database creator in the galaxy (Applicant: A. Speksnijder)
 
