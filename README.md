@@ -7,7 +7,7 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 ### Creation of custom databases with script(s) that harvest information from
 
 - taxonomic list (NSR - Dutch Species Register)
-- Naturalis (local) taxonomy database (Klasse)
+- Naturalis (local) taxonomy database (Klasse, ..CRS?)
 - Naturalis (local) sequence database (Geneious)
 - public sequence databases (GenBank, Bold)
 
