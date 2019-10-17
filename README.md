@@ -1,6 +1,6 @@
 # Custom-databases-DNA-sequences
 Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUIVsS8jiUE9vmRnP7cdBWNx_Q59V0t9vxko5U51es/edit#gid=420939240)
-Applicant: B. van der Hoorn
+ (Applicant: B. van der Hoorn)
 
 ## Project goals
 
