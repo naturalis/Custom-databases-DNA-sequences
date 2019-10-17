@@ -14,10 +14,10 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 ### Filter data
 - criteria?
 
-### curation of newly created databases
+### Curation of newly created databases
 - possibility to add records (sequences?) to these databases
 
-### export function
+### Export function
 - data should be exportable in Fasta format
 
 ### Blast
