@@ -17,6 +17,15 @@ De opdracht bestaat dan ook uit:
 
 * Ter indicatie: de NT database van GenBank is ~350 GB waar om het Blasten efficient te laten verlopen selecties van worden gemaakt (COI, 16S, 12S,18S, ITS, MatK, Rbcl en trnL). Databases die oa. worden gebruikt zijn Bold (~4GB), Unite (~1 GB) en Silva (~6 GB).
 
+7. Vaststellen van genetische en taxonomische diversiteit van de fauna in de Nederlandse
+zoet- en zout-watergebieden
+
+Naturalis onderzoekt dit laatste aan de hand van DNA barcoding van de COI marker van het
+mitochondriaal genoom. In dit project ontwikkelt de student een momentopname van de totale
+diversiteit aan de hand van de data voor deze marker zoals intern beschikbaar en in publieke
+databases. Deze momentopname wordt inzichtelijk door de visualisatie van een taxonomische
+backbone voor zover die gedekt is door data, en vervolgens door de genetische clusters binnen elke
+soort op deze backbone.
 
 
 ## Beschrijving van de aard van de werkzaamheden die je gaat uitvoeren, teneinde deze afstudeeropdracht tot een goed einde te brengen:
