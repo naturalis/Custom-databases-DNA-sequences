@@ -1,13 +1,20 @@
-**(W5-10) 06/01/2020 - 14/02/2019**
-- Consulting with stakeholders within the organization (project requirements)
-- Re-submitting research proposal after No-Go
+**(W12) 24/02/2020 - 01/03/2020**
+- Fetching NCBI TaxID for Binomial Nomenclature
+- Matching TaxID to Accession numbers
+- NCBI Sequence Data Retrieval using the Entrez Direct UNIX E-utilities
 
-**(W4) 16/12/2019 - 22/12/2019**
+**(W11) 17/02/2020 - 23/02/2020**
+- Retrieval of Taxonomic List from the Dutch Specier Register (NSR)
+- Extracting Binomial Nomenclature and preparing Web Service Endpoints
+- BOLD Sequence Data Retrieval using their Public Data Portal API
+
+**(W4-10) 17/12/2019 - 16/02/2020**
 - Draft, acquiring feedback on, and submitting research proposal for approval
+- Consulting with stakeholders within the organization (project requirements)
 
-**(W2-3) 02/12/2019 - 15/12/2019**
-- Gathering relevant scientific literature
+**(W2-3) 02/12/2019 - 16/12/2019**
 - Defining the goal and background information of the research assignment
+- Gathering relevant scientific literature
 
 **(W1) 25/11/2019 - 01/12/2019**
 - Orientation period
