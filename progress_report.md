@@ -1,5 +1,10 @@
+**(W13) 02/03/2020 - 08/03/2020**
+- Merging BOLD and NCBI Sequence Data
+- Building a BLAST database
+- Bugfixes
+
 **(W12) 24/02/2020 - 01/03/2020**
-- Fetching NCBI TaxID for Binomial Nomenclature
+- Fetching NCBI TaxID from Binomial Nomenclature
 - Matching TaxID to Accession numbers
 - NCBI Sequence Data Retrieval using the Entrez Direct UNIX E-utilities
 
