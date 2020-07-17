@@ -132,7 +132,7 @@ def bold_nsr():
 
 def main():
     genera = dutch_species_register()
-    #bold_extract(genera)
+    bold_extract(genera)
     bold_nsr()
     print("Done")
 main()
