@@ -10,6 +10,18 @@
 #   BOLD and NCBI. Public sequence data will be filtered before
 #   compared and merged with existing internal databases.
 #
+#   Usage: custom_databases.py [options]
+#
+#   Optional arguments:
+#     -h, --help		Display this message.
+#     -input_dir                Input file directory
+#     -infile1      		    NSR Taxonomy input file
+#     -infile2                  NSR Synonym input file
+#     -outfile1                 Matching records
+#     -outfile2                 Non-matching records
+#     -output_dir1              Public sequence data output directory
+#     -output_dir2              Outfile1/2 output directory
+#
 #   Software prerequisites: (see readme for versions and details).
 # ====================================================================
 
@@ -21,14 +33,24 @@ import pandas as pd
 import urllib3
 http = urllib3.PoolManager()
 csv.field_size_limit(100000000)
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
-# User arguments
+# Optional user arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-infile1', help="Input file: NSR taxonomy export")
-parser.add_argument('-output_dir', help="Output directory")
-parser.add_argument('-outfile1', help="Output file: Matching records")
-parser.add_argument('-outfile2', help="Output file: Missmatch records")
+parser.add_argument('-input_dir', default=dir_path, help="Input directory")
+parser.add_argument('-infile1', default="NSR_taxonomy.csv",
+                    help="Input file: NSR taxonomy export")
+parser.add_argument('-infile2', default="NSR_synonyms.csv",
+                    help="Input file: NSR synonym export")
+parser.add_argument('-outfile1', default="match.tsv",
+                    help="Output file: Matching records")
+parser.add_argument('-outfile2', default="mismatch.tsv",
+                    help="Output file: Missmatch records")
+parser.add_argument('-output_dir1', default="BOLD",
+                    help="Public sequence data output directory")
+parser.add_argument('-output_dir2', default=dir_path,
+                    help="Compare output directory")
 args = parser.parse_args()
 
 
@@ -52,7 +74,7 @@ def dutch_species_register():
     """
     # Load CSV as Pandas DataFrame
     # Define header row and seperator
-    df = pd.read_csv(args.infile1, header=2, sep="\t")
+    df = pd.read_csv(args.input_dir+"/"+args.infile1, header=2, sep="\t")
 
     # Filter out genera only records
     scientific = df[df['rank'] != "genus"]
@@ -95,10 +117,6 @@ def bold_extract(genera):
     source_urls = list(map(lambda x: "{}{}{}".
                            format(base_url, x, '&format=tsv'), genera))
 
-    # Create BOLD subdirectory if it doesn't already exists
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-
     # Download sequence data from BOLD using list of url's
     print('Beginning sequence data retrieval...')
     counter = 0
@@ -106,7 +124,7 @@ def bold_extract(genera):
         r = http.request('GET', url)
         name = genera[counter]
         counter += 1
-        with open(args.output_dir+"/"+name+".tsv", "wb") as fcont:
+        with open(args.output_dir1+"/"+name+".tsv", "wb") as fcont:
             fcont.write(r.data)
 
 
@@ -128,14 +146,15 @@ def bold_nsr(species):
     """
 
     # Open output files for writing
-    f1 = open(args.outfile1, "w")
-    f2 = open(args.outfile2, "w")
+    f1 = open(args.output_dir2+"/"+args.outfile1, "w")
+    f2 = open(args.output_dir2+"/"+args.outfile2, "w")
 
     # Loop over each genus(file) downloaded from BOLD
-    for file in os.listdir(args.output_dir):
+    print('Comparing sequence data to list of species...')
+    for file in os.listdir(args.output_dir1):
         filename = os.fsdecode(file)
         if filename.endswith(".tsv"):
-            with open(args.output_dir+"/"+os.path.join(filename), errors='ignore') as tsvfile:
+            with open(args.output_dir1+"/"+os.path.join(filename), errors='ignore') as tsvfile:
                 tsvreader = csv.DictReader(tsvfile, delimiter="\t")
                 # Filter for Dutch records only
                 for line in tsvreader:
