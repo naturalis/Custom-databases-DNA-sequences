@@ -1,10 +1,16 @@
+**20/07/2020 -**
+- Upload workflow
+- Adjusting script for compatibility with actual data file
+- Comparing unmatched species against list of known synonyms
+- Implementing argparse arguments
+
 **15/06/2020 - 17/07/2020**
-- Redifining project goal
-- Export list of species from the Dutch Species Register (NSR)
+- Redefining project goal
+- Export testfile with species from the Dutch Species Register (NSR)
 - Using genera to extract their public sequence data using BOLD's Public Data Portal API
 - Comparing downloaded species to those from the NSR, filtered to Dutch records only
 
-** 02/03/2020 - 08/03/2020**
+**02/03/2020 - 08/03/2020**
 - Merging BOLD and NCBI Sequence Data
 - Building a BLAST database
 
