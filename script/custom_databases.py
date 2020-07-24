@@ -4,18 +4,19 @@
 # Description:   Retrieve, filter and combine (public) sequence data
 
 # Custom Databases
-#   The Custom Databases script uses a full taxonomic breakdown
-#   of species stored in the Dutch Species Register (NSR) and
-#   harvests matching sequence data from public databases like
-#   BOLD and NCBI. Public sequence data will be filtered before
-#   compared and merged with existing internal databases.
+#   The Custom Databases script uses a full taxonomic breakdown of
+#   species, including synonyms and expected species, stored
+#   in the Dutch Species Register (NSR). Its export is used to
+#   harvest matching species with sequence data from public
+#   databases like BOLD and NCBI. This data will be filtered before
+#   being compared to and merged with existing internal databases.
 #
 #   Usage: custom_databases.py [options]
 #
 #   Optional arguments:
-#     -h, --help		Display this message.
+#     -h, --help                Display this message.
 #     -input_dir                Input file directory
-#     -infile1      		    NSR Taxonomy input file
+#     -infile1                  NSR Taxonomy input file
 #     -infile2                  NSR Synonym input file
 #     -outfile1                 Matching records
 #     -outfile2                 Non-matching records
@@ -50,15 +51,15 @@ parser.add_argument('-outfile2', default="mismatch.tsv",
 parser.add_argument('-output_dir1', default="BOLD",
                     help="Public sequence data output directory")
 parser.add_argument('-output_dir2', default=dir_path,
-                    help="Compare output directory")
+                    help="Outfile1/2 output directory")
 args = parser.parse_args()
 
 
-def dutch_species_register():
+def nsr_taxonomy():
     """
     Loads a CSV file into a Pandas Dataframe. Isolates
-    species and genera consecutively, and converts
-    them into their respective list.
+    species and genera consecutively, and converts them
+    into their respective list.
     Arguments:
         df: CSV file read as Pandas Dataframe
         scientific: Dataframe containing all species level data
@@ -76,13 +77,13 @@ def dutch_species_register():
     # Define header row and seperator
     df = pd.read_csv(args.input_dir+"/"+args.infile1, header=2, sep="\t")
 
-    # Filter out genera only records
+    # Filter out genus only records
     scientific = df[df['rank'] != "genus"]
 
     # Isolate species (cut off at subsp.)
     species = scientific['scientific_name'].apply(lambda x: ' '.join(x.split()[:2]))
 
-    # Add genera only records to copy of species
+    # Add genus only records to copy of species
     genus_only = df[df['rank'] == "genus"]
     data = pd.concat([genus_only['scientific_name'], species])
 
@@ -97,12 +98,56 @@ def dutch_species_register():
     return species_list, genera_list
 
 
+def nsr_synonyms():
+    """
+    Loads a CSV file into a Pandas Dataframe. Selects all
+    scientific synonyms, and selects the synonym and
+    accepted taxons. Species names are cut off at subsp.
+    before synonym with respective taxon are paired
+    in a dictionary. All unique synonyms are stored in
+    a seperate list for reference.
+    Arguments:
+        df: CSV file read as Pandas Dataframe
+        scientific: Subset containing all scientific synonyms
+        df1: Subset containing specified columns
+        columns: List of dataframe columns
+        synonym: All synonyms, cut off at subsp.
+        taxon: All accepted taxons, cut off at subsp.
+        df2: Synonyms and taxons combined
+    Return:
+        synonyms: List of all unique synonyms
+        syn_dict: Dictionary pairing synonym with respective taxon
+    """
+    # Load CSV as Pandas DataFrame
+    # Define header row and seperator
+    df = pd.read_csv(args.input_dir+"/"+args.infile2, header=2, sep="\t")
+
+    # Extract scientific synonyms
+    scientific = df[df['language'] == "Scientific"]
+
+    # Select specific columns
+    df1 = scientific[['synonym', 'taxon']]
+
+    # Isolate species for each column (cut off at subsp.)
+    columns = list(df1.columns)
+    synonym, taxon = [df1[i].apply(lambda x: ' '.join(x.split()[:2])).to_frame() for i in columns]
+    df2 = synonym.join(taxon)
+
+    # Create list of all unique synonyms
+    synonym.drop_duplicates(inplace=True)
+    synonyms = synonym['synonym'].values.tolist()
+
+    # Convert Dataframe to Dictionary
+    syn_dict = df2.set_index('synonym')['taxon'].to_dict()
+
+    return synonyms, syn_dict
+
+
 def bold_extract(genera):
     """
     Downloads all collected genera using BOLD's Public Data Portal API.
     Base URL for data retrieval is appended to each genus from the NSR list.
-    A seperate BOLD folder for storage is created if non-existent. Genera
-    are retrieved one genus at a time and saved to the allocated folder.
+    Genera are retrieved one genus at a time and saved to the allocated folder.
     Arguments:
         base_url: String, default URL for data retrieval using BOLD's API
         source_urls: List of all URL's to be retrieved
@@ -128,27 +173,19 @@ def bold_extract(genera):
             fcont.write(r.data)
 
 
-def bold_nsr(species):
+def bold_nsr(species, synonyms, syn_dict):
     """
     Iterating over every downloaded file from BOLD, sequence data is compared
     against species from the NSR. Subgenera will be filtered out creating a
     file with as many accepeted names as possible. Mismatches against the NSR
     are copied to a seperate list.
     Arguments:
-        taxonomy: File containing all species from the NSR
-        species: Species file saved as list
-        f1: Outputfile to contain matching species sequence data
-        f2: Outputfile to contain missmatches between NSR and BOLD
         file: String, current filename (genus) from the BOLD downloads
         filename: String, decoding the filename from the filesystem encoding
         tsvreader: File (genus) read in a tab delimited matter
+        header: List of all column names
         line: Rows of the current file (genus)
     """
-
-    # Open output files for writing
-    f1 = open(args.output_dir2+"/"+args.outfile1, "w")
-    f2 = open(args.output_dir2+"/"+args.outfile2, "w")
-
     # Loop over each genus(file) downloaded from BOLD
     print('Comparing sequence data to list of species...')
     for file in os.listdir(args.output_dir1):
@@ -156,6 +193,7 @@ def bold_nsr(species):
         if filename.endswith(".tsv"):
             with open(args.output_dir1+"/"+os.path.join(filename), errors='ignore') as tsvfile:
                 tsvreader = csv.DictReader(tsvfile, delimiter="\t")
+                header = tsvreader.fieldnames
                 # Filter for Dutch records only
                 for line in tsvreader:
                     if line['country'] == "Netherlands":
@@ -164,26 +202,39 @@ def bold_nsr(species):
                             pass
                         # Compare genus to known species from NSR
                         elif line['species_name'] in species:
-                            for key, value in line.items():
-                                f1.write('%s\t' % (value))
-                            f1.write("\n")
+                            bold_output(args.outfile1, line)
+                        # Check for synonyms, apply accepted name
+                        elif line['species_name'] in synonyms:
+                            for synonym, taxon in syn_dict.items():
+                                if synonym == line['species_name']:
+                                    line['species_name'] = taxon
+                                    bold_output(args.outfile1, line)
                         # Write missmatches to seperate file
                         else:
-                            for key, value in line.items():
-                                f2.write('%s\t' % (value))
-                            f2.write("\n")
+                            bold_output(args.outfile2, line)
             continue
         else:
             continue
+    return header
 
-    # Close output files
-    f1.close()
-    f2.close()
+
+def bold_output(file, line):
+    """
+    Opens respective output file and appends the record.
+    """
+    with open(args.output_dir2+"/"+file, "a") as f:
+        for key, value in line.items():
+            f.write('%s\t' % (value))
+        f.write("\n")
 
 
 def main():
-    species, genera = dutch_species_register()
+    """
+    Main logic. Powers each function with their respective input.
+    """
+    species, genera = nsr_taxonomy()
+    synonyms, syn_dict = nsr_synonyms()
     bold_extract(genera)
-    bold_nsr(species)
+    header = bold_nsr(species, synonyms, syn_dict)
     print("Done")
 main()
