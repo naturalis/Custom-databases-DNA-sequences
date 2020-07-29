@@ -44,9 +44,9 @@ parser.add_argument('-infile1', default="NSR_taxonomy.csv",
                     help="Input file: NSR taxonomy export")
 parser.add_argument('-infile2', default="NSR_synonyms.csv",
                     help="Input file: NSR synonym export")
-parser.add_argument('-outfile1', default="match.tsv",
+parser.add_argument('-outfile1', default="match.fasta",
                     help="Output file: Matching records")
-parser.add_argument('-outfile2', default="mismatch.tsv",
+parser.add_argument('-outfile2', default="mismatch.fasta",
                     help="Output file: Missmatch records")
 parser.add_argument('-output_dir1', default="BOLD",
                     help="Public sequence data output directory")
@@ -183,7 +183,6 @@ def bold_nsr(species, synonyms, syn_dict):
         file: String, current filename (genus) from the BOLD downloads
         filename: String, decoding the filename from the filesystem encoding
         tsvreader: File (genus) read in a tab delimited matter
-        header: List of all column names
         line: Rows of the current file (genus)
     """
     # Loop over each genus(file) downloaded from BOLD
@@ -193,7 +192,6 @@ def bold_nsr(species, synonyms, syn_dict):
         if filename.endswith(".tsv"):
             with open(args.output_dir1+"/"+os.path.join(filename), errors='ignore') as tsvfile:
                 tsvreader = csv.DictReader(tsvfile, delimiter="\t")
-                header = tsvreader.fieldnames
                 # Filter for Dutch records only
                 for line in tsvreader:
                     if line['country'] == "Netherlands":
@@ -215,26 +213,51 @@ def bold_nsr(species, synonyms, syn_dict):
             continue
         else:
             continue
-    return header
 
 
 def bold_output(file, line):
     """
-    Opens respective output file and appends the record.
+    Opens respective output file and appends the record. Ensures all
+    emitted records contain sequence data. Specific fields to emit
+    are stored in a list and will be combined, along with filtered
+    fields, into a fasta header format corresponding with the data.
+    Arguments:
+        header: List of record fields to be emitted
+        f: Outputfile, either match or mismatch depending on parameter
     """
-    with open(args.output_dir2+"/"+file, "a") as f:
-        for key, value in line.items():
-            f.write('%s\t' % (value))
-        f.write("\n")
-
+    # Ensure record contains sequence data
+    if bool(line.get('nucleotides')) == True:
+        # Define record fields to use
+        header = ['processid', 'species_name', 'markercode']
+        # Open respective outputfile from parameter
+        with open(args.output_dir2+"/"+file, "a") as f:
+            # Combine record fields in fasta format and append to file
+            f.write(">"+'|'.join([line.get(field) for field in header]))
+            f.write('|'+str(line.get('genbank_accession')) if line.get('genbank_accession') else '|none')
+            f.write('|'+str(line.get('catalognum'))+'\n' if line.get('catalognum') else '|none\n')
+            f.write(str(line.get('nucleotides'))+'\n')
+    else:
+        pass
+    
+    # TSV
+    #with open(args.output_dir2+"/"+file, "a") as f:
+    #    for key, value in line.items():
+    #        f.write('%s\t' % (value))
+    #    f.write("\n")
+    
 
 def main():
     """
     Main logic. Powers each function with their respective input.
     """
+    # Create clean output files
+    open(args.output_dir2+"/"+args.outfile1, 'w').close()
+    open(args.output_dir2+"/"+args.outfile2, 'w').close()
+
+    # Run functions
     species, genera = nsr_taxonomy()
     synonyms, syn_dict = nsr_synonyms()
     bold_extract(genera)
-    header = bold_nsr(species, synonyms, syn_dict)
+    bold_nsr(species, synonyms, syn_dict)
     print("Done")
 main()
