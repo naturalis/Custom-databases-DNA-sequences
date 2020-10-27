@@ -48,7 +48,7 @@ python custom_databases.py
 Using any of the optional user arguments allows for the user to change the input/output destination of the files and folders. Example:
 
 ```sh
-python custom_databases.py -input_dir data/NSR_exports -outfile1 match.fasta -outfile2 mismatch.fasta -output_dir1 data/BOLD_exports -output_dir2 data/FASTA_files
+python custom_databases.py -input_dir ../data/NSR_exports -outfile1 match.fasta -outfile2 mismatch.fasta -output_dir1 ../data/BOLD_exports -output_dir2 ../data/FASTA_files
 ```
 
 
