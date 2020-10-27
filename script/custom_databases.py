@@ -34,12 +34,12 @@ import pandas as pd
 import urllib3
 http = urllib3.PoolManager()
 csv.field_size_limit(100000000)
-dir_path = os.path.dirname(os.path.realpath(__file__))
+par_path = os.path.abspath(os.path.join(os.pardir))
 
 
 # Optional user arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-input_dir', default="data/NSR_exports"
+parser.add_argument('-input_dir', default=par_path+"/data/NSR_exports"
                     , help="NSR export files directory")
 parser.add_argument('-infile1', default="NSR_taxonomy.csv",
                     help="Input file: NSR taxonomy export")
@@ -49,9 +49,9 @@ parser.add_argument('-outfile1', default="match.fasta",
                     help="Output file: Matching records")
 parser.add_argument('-outfile2', default="mismatch.fasta",
                     help="Output file: Missmatch records")
-parser.add_argument('-output_dir1', default="data/BOLD_exports",
+parser.add_argument('-output_dir1', default=par_path+"/data/BOLD_exports",
                     help="Public sequence data output directory")
-parser.add_argument('-output_dir2', default="data/FASTA_files",
+parser.add_argument('-output_dir2', default=par_path+"/data/FASTA_files",
                     help="Outfile1/2 output directory")
 args = parser.parse_args()
 
