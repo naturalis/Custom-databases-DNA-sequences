@@ -8,4 +8,4 @@ Using an export from the Dutch Species Register (NSR) with a full taxonomic brea
 
 
 ## custom_databases.Rmd
-Determine the distribution of species collected (against a reference), and an overview of the quality of its data.
+Determine the distribution of species collected (against a reference), and presents an overview of the contribution and significance of various parameters stored within the obtained public sequence data relating to the quality thereof.
