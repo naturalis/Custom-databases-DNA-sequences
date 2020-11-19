@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## 19/11/2020
+
+- Archiving obtained BOLD sequence data in a single zip file
+- Updating default argument paths
+
 ## 29/07/2020
 
 - Upload workflow
