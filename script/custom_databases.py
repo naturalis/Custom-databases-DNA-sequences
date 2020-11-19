@@ -7,21 +7,20 @@
 #   The Custom Databases script uses a full taxonomic breakdown of
 #   species, including synonyms and expected species, stored
 #   in the Dutch Species Register (NSR). Its export is used to
-#   harvest matching species with sequence data from public
-#   databases like BOLD and NCBI. This data will be filtered before
-#   being compared to and merged with existing internal databases.
+#   harvest matching species with sequence data from the
+#   Barcode of Life Data (BOLD).
 #
 #   Usage: custom_databases.py [options]
 #
 #   Optional arguments:
-#     -h, --help                Display this message.
+#     -h, --help		Display this message
 #     -input_dir                Input file directory
-#     -infile1                  NSR Taxonomy input file
+#     -infile1      		NSR Taxonomy input file
 #     -infile2                  NSR Synonym input file
-#     -outfile1                 Matching records
-#     -outfile2                 Non-matching records
 #     -output_dir1              Public sequence data output directory
 #     -output_dir2              Outfile1/2 output directory
+#     -outfile1                 Matching records
+#     -outfile2                 Non-matching records
 #
 #   Software prerequisites: (see readme for versions and details).
 # ====================================================================
@@ -32,28 +31,32 @@ import os
 import csv
 import pandas as pd
 import urllib3
+import zipfile
+import io
+from zipfile import ZipFile
+from os.path import basename
 http = urllib3.PoolManager()
 csv.field_size_limit(100000000)
 par_path = os.path.abspath(os.path.join(os.pardir))
 
-
 # Optional user arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-input_dir', default=par_path+"/data/NSR_exports"
-                    , help="NSR export files directory")
+parser.add_argument('-input_dir', default=par_path+"/data/NSR_exports",
+                    help="NSR export files directory")
 parser.add_argument('-infile1', default="NSR_taxonomy.csv",
                     help="Input file: NSR taxonomy export")
 parser.add_argument('-infile2', default="NSR_synonyms.csv",
                     help="Input file: NSR synonym export")
-parser.add_argument('-outfile1', default="match.fasta",
-                    help="Output file: Matching records")
-parser.add_argument('-outfile2', default="mismatch.fasta",
-                    help="Output file: Missmatch records")
 parser.add_argument('-output_dir1', default=par_path+"/data/BOLD_exports",
                     help="Public sequence data output directory")
 parser.add_argument('-output_dir2', default=par_path+"/data/FASTA_files",
                     help="Outfile1/2 output directory")
+parser.add_argument('-outfile1', default="match.fasta",
+                    help="Output file: Matching records")
+parser.add_argument('-outfile2', default="mismatch.fasta",
+                    help="Output file: Missmatch records")
 args = parser.parse_args()
+zip_path = args.output_dir1+"/BOLD_export.zip"
 
 
 def nsr_taxonomy():
@@ -174,7 +177,24 @@ def bold_extract(genera):
             fcont.write(r.data)
 
 
-def bold_nsr(species, synonyms, syn_dict):
+def zip_directory(folder_path, zip_path):
+    """
+    Crompesses all BOLD Sequence Data output into a zip file format.
+    """
+    # create a ZipFile object
+    with ZipFile(zip_path, mode='w') as zipObj:
+        # Iterate over all the files in directory
+        for folderName, subfolders, filenames in os.walk(folder_path):
+            for filename in filenames:
+                # Filter on TSV files
+                if filename.endswith(".tsv"):
+                    # Create complete filepath of file in directory
+                    filePath = os.path.join(folderName, filename)
+                    # Add file to zip
+                    zipObj.write(filePath, basename(filePath))
+
+
+def bold_nsr(species, synonyms, syn_dict, zip_path):
     """
     Iterating over every downloaded file from BOLD, sequence data is compared
     against species from the NSR. Subgenera will be filtered out creating a
@@ -188,32 +208,37 @@ def bold_nsr(species, synonyms, syn_dict):
     """
     # Loop over each genus(file) downloaded from BOLD
     print('Comparing sequence data to list of species...')
-    for file in os.listdir(args.output_dir1):
-        filename = os.fsdecode(file)
-        if filename.endswith(".tsv"):
-            with open(args.output_dir1+"/"+os.path.join(filename), errors='ignore') as tsvfile:
-                tsvreader = csv.DictReader(tsvfile, delimiter="\t")
-                # Filter for Dutch records only
-                for line in tsvreader:
-                    if line['country'] == "Netherlands":
-                        # Skip subgenus
-                        if "." in str(line['species_name']):
-                            pass
-                        # Compare genus to known species from NSR
-                        elif line['species_name'] in species:
-                            bold_output(args.outfile1, line)
-                        # Check for synonyms, apply accepted name
-                        elif line['species_name'] in synonyms:
-                            for synonym, taxon in syn_dict.items():
-                                if synonym == line['species_name']:
-                                    line['species_name'] = taxon
+    # Open file from zip
+    with zipfile.ZipFile(zip_path) as z:
+        for file in z.namelist():
+            if not os.path.isdir(file):
+                # Read the file
+                filename = os.fsdecode(file)
+                if filename.endswith(".tsv"):
+                    with z.open(filename, 'r') as zfile:
+                        zfile = io.TextIOWrapper(io.BytesIO(zfile.read()), errors='ignore')
+                        tsvreader = csv.DictReader(zfile, delimiter="\t")
+                        # Filter for Dutch records only
+                        for line in tsvreader:
+                            if line['country'] == "Netherlands":
+                                # Skip subgenus
+                                if "." in str(line['species_name']):
+                                    pass
+                                # Compare genus to known species from NSR
+                                elif line['species_name'] in species:
                                     bold_output(args.outfile1, line)
-                        # Write missmatches to seperate file
-                        else:
-                            bold_output(args.outfile2, line)
-            continue
-        else:
-            continue
+                                # Check for synonyms, apply accepted name
+                                elif line['species_name'] in synonyms:
+                                    for synonym, taxon in syn_dict.items():
+                                        if synonym == line['species_name']:
+                                            line['species_name'] = taxon
+                                            bold_output(args.outfile1, line)
+                                # Write missmatches to seperate file
+                                else:
+                                    bold_output(args.outfile2, line)
+                    continue
+                else:
+                    continue
 
 
 def bold_output(file, line):
@@ -239,13 +264,13 @@ def bold_output(file, line):
             f.write(str(line.get('nucleotides'))+'\n')
     else:
         pass
-    
+
     # TSV
     #with open(args.output_dir2+"/"+file, "a") as f:
     #    for key, value in line.items():
     #        f.write('%s\t' % (value))
     #    f.write("\n")
-    
+
 
 def main():
     """
@@ -259,6 +284,7 @@ def main():
     species, genera = nsr_taxonomy()
     synonyms, syn_dict = nsr_synonyms()
     bold_extract(genera)
-    bold_nsr(species, synonyms, syn_dict)
+    zip_directory(args.output_dir1, zip_path)
+    bold_nsr(species, synonyms, syn_dict, zip_path)
     print("Done")
 main()
