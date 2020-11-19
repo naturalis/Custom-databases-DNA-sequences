@@ -1,3 +1,11 @@
-Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, running the script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only and writing matching/non-matching sequence data to their allocated files. Periodically performed, a custom database will be created and kept up to date regarding new or changes to the public sequence data of interest.
+# Scripts
 
-![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Flowchart.png?raw=true)
+Brief description of each script.
+
+
+## custom_databases.py
+Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, running the script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only, it writes matching/non-matching sequence data to their allocated files.
+
+
+## custom_databases.Rmd
+Determine the distribution of species collected (against a reference), and an overview of the quality of its data.
