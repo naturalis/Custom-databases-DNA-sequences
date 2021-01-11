@@ -15,13 +15,13 @@ All sequence data is compared against species from the NSR. In case of any misma
 
 ## BOLD exports
 Using BOLD’s Public Data Portal [API](http://boldsystems.org/index.php/resources/api?type=webservices) genera are retrieved one genus at a time and saved to the allocated folder (`BOLD_exports/genera.tsv`).
-To acquire as much information as possible, the [FASTA files](https://en.wikipedia.org/wiki/FASTA_format) consisting of sequences holds all possible fields, including, but not limited to, their process id, identification number, marker, and accession code.
+To acquire as much information as possible, the [FASTA files](https://en.wikipedia.org/wiki/FASTA_format) consisting of sequences holds all possible fields, including but not limited to Process ID, Species Name, Markercode, Genbank Accession, Catalognumber, Researchers, Geographic site, and Nucleotides of each species.
 Reducing storage requirements, all files are archived in a single zip file.
 
 
 ## Fasta files
 Iterating over every downloaded file from BOLD, sequence data is compared against species from the NSR. Subgenera will be filtered out creating a file with as many accepeted names as possible (`FASTA_files/match.fasta`). Mismatches against the NSR, provided they hold no known synonym, are copied to a seperate list (`FASTA_files/mismatch.fasta`).
-These fasta files contain the Process ID, Species Name, Markercode, Genbank Accession, Catalognumber, and Nucleotides of each species.
+Depending on user settings, a subset of fields can be made to covert the tab seperated data to FASTA format.
 
 
 
