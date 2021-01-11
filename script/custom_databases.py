@@ -4,11 +4,11 @@
 # Description:   Retrieve, filter and combine (public) sequence data
 
 # Custom Databases
-#   The Custom Databases script uses a full taxonomic breakdown of
+#   The Custom Databases script uses a scientific notation of
 #   species, including synonyms and expected species, stored
 #   in the Dutch Species Register (NSR). Its export is used to
 #   harvest matching species with sequence data from the
-#   Barcode of Life Data (BOLD).
+#   Barcode of Life Data (BOLD) database.
 #
 #   Usage: custom_databases.py [options]
 #
@@ -38,6 +38,7 @@ from os.path import basename
 http = urllib3.PoolManager()
 csv.field_size_limit(100000000)
 par_path = os.path.abspath(os.path.join(os.pardir))
+output_header = False
 
 # Optional user arguments
 parser = argparse.ArgumentParser()
@@ -61,54 +62,41 @@ zip_path = args.output_dir1+"/BOLD_export.zip"
 
 def nsr_taxonomy():
     """
-    Loads a CSV file into a Pandas Dataframe. Isolates
-    species and genera consecutively, and converts them
-    into their respective list.
+    Loads a NSR taxonomy CSV file into a Pandas Dataframe, Isolates
+    its species, and converts it into a list.
     Arguments:
         df: CSV file read as Pandas Dataframe
         scientific: Dataframe containing all species level data
         species: Isolated species taxonomy
-        genus_only: Dataframe containing all genus level data
-        data: Species and genus level dataframes combined
-        genera: Isolated genus taxonomy
-        dataframes: list of all dataframes
         species_list: list of all unique species
-        genera_list: list of all unique genera
     Return:
-        Lists containing all unique species and genera
+        List containing all unique species
     """
     # Load CSV as Pandas DataFrame
     # Define header row and seperator
     df = pd.read_csv(args.input_dir+"/"+args.infile1, header=2, sep="\t")
 
-    # Filter out genus only records
+    # Filter out non species records
     scientific = df[df['rank'] != "genus"]
 
     # Isolate species (cut off at subsp.)
     species = scientific['scientific_name'].apply(lambda x: ' '.join(x.split()[:2]))
 
-    # Add genus only records to copy of species
-    genus_only = df[df['rank'] == "genus"]
-    data = pd.concat([genus_only['scientific_name'], species])
+    # Drop duplicates
+    species.drop_duplicates(inplace=True)
 
-    # Isolate all genera
-    genera = data.str.split(" ", 1).str.get(0)
+    # Convert Dataframe to Dictionary
+    species_list = species.values.tolist()
 
-    # Define DataFrames, drop duplicates, and covert to List
-    dataframes = [species, genera]
-    [i.drop_duplicates(inplace=True) for i in dataframes]
-    species_list, genera_list = [i.values.tolist() for i in dataframes]
-
-    return species_list, genera_list
+    return species_list
 
 
 def nsr_synonyms():
     """
-    Loads a CSV file into a Pandas Dataframe. Selects all
-    scientific synonyms, and selects the synonym and
-    accepted taxons. Species names are cut off at subsp.
-    before synonym with respective taxon are paired
-    in a dictionary. All unique synonyms are stored in
+    Loads a NSR synonym CSV file into a Pandas Dataframe and selects
+    all scientific synonyms with their synonym and accepted taxons.
+    Species names are cut off at subsp. before synonym with respective
+    taxon are paired in a dictionary. All unique synonyms are stored in
     a seperate list for reference.
     Arguments:
         df: CSV file read as Pandas Dataframe
@@ -145,6 +133,24 @@ def nsr_synonyms():
     syn_dict = df2.set_index('synonym')['taxon'].to_dict()
 
     return synonyms, syn_dict
+
+
+def nsr_combined(species, synonyms):
+    """
+    Combines the scientific names of obtained taxonomy and synonyms
+    to one list. Subselects all genera.
+    Arguments:
+        genera: List of all unique genera
+    Return:
+        List containing all unique species and/or their genera
+    """
+    # Combine taxa
+    species.extend(synonyms)
+    species = sorted(set(species))
+
+    # Subselect genera
+    genera = [i.split()[0] for i in species]
+    return species, genera
 
 
 def bold_extract(genera):
@@ -251,25 +257,38 @@ def bold_output(file, line):
         header: List of record fields to be emitted
         f: Outputfile, either match or mismatch depending on parameter
     """
-    # Ensure record contains sequence data
-    if bool(line.get('nucleotides')) == True:
-        # Define record fields to use
-        header = ['processid', 'species_name', 'markercode']
-        # Open respective outputfile from parameter
-        with open(args.output_dir2+"/"+file, "a") as f:
-            # Combine record fields in fasta format and append to file
-            f.write(">"+'|'.join([line.get(field) for field in header]))
-            f.write('|'+str(line.get('genbank_accession')) if line.get('genbank_accession') else '|none')
-            f.write('|'+str(line.get('catalognum'))+'\n' if line.get('catalognum') else '|none\n')
-            f.write(str(line.get('nucleotides'))+'\n')
-    else:
-        pass
+##    # Fasta format
+##    # Ensure record contains sequence data
+##    if bool(line.get('nucleotides')) == True:
+##        # Define record fields to use
+##        header = ['processid', 'species_name', 'markercode']
+##        # Open respective outputfile from parameter
+##        with open(args.output_dir2+"/"+file, "a") as f:
+##            # Combine record fields in fasta format and append to file
+##            f.write(">"+'|'.join([line.get(field) for field in header]))
+##            f.write('|'+str(line.get('genbank_accession')) if line.get('genbank_accession') else '|none')
+##            f.write('|'+str(line.get('catalognum'))+'\n' if line.get('catalognum') else '|none\n')
+##            f.write(str(line.get('nucleotides'))+'\n')
+##    else:
+##        pass
 
-    # TSV
-    #with open(args.output_dir2+"/"+file, "a") as f:
-    #    for key, value in line.items():
-    #        f.write('%s\t' % (value))
-    #    f.write("\n")
+    # Tab Seperated
+    global output_header
+
+    # Write header to output files (executes only one time per run)
+    if output_header is False:
+        for temp in (args.outfile1, args.outfile2):
+            with open(args.output_dir2+"/"+temp, "a") as f:
+                for key, value in line.items():
+                    f.write('%s\t' % (key))
+                f.write("\n")
+        output_header = True
+
+    # Write sequence data, for each record
+    with open(args.output_dir2+"/"+file, "a") as f:
+        for key, value in line.items():
+            f.write('%s\t' % (value))
+        f.write("\n")
 
 
 def main():
@@ -281,10 +300,11 @@ def main():
     open(args.output_dir2+"/"+args.outfile2, 'w').close()
 
     # Run functions
-    species, genera = nsr_taxonomy()
+    species = nsr_taxonomy()
     synonyms, syn_dict = nsr_synonyms()
-    bold_extract(genera)
+    nsr_species, nsr_genera = nsr_combined(species, synonyms)
+    bold_extract(nsr_genera)
     zip_directory(args.output_dir1, zip_path)
-    bold_nsr(species, synonyms, syn_dict, zip_path)
+    bold_nsr(nsr_species, synonyms, syn_dict, zip_path)
     print("Done")
 main()
