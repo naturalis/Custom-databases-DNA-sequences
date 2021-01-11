@@ -1,0 +1,74 @@
+---
+title: "Custom Databases Analyses"
+author: "Bastiaan"
+date: "11 January 2021"
+output: html_document
+---
+
+Introduction
+------------
+
+The following R markdown file performs the steps needed to search out and visualize overlap / gaps between obtained public sequence data (using the custom_databases.py script) and its reference by the Dutch Species Register.
+
+The following libraries and scripts need to be loaded:
+
+```{r libraries, include=FALSE}
+library(rmarkdown)
+library(flexdashboard)
+library(crosstalk)
+library(collapsibleTree)
+library(reshape2)
+library(shiny)
+library(stringr)
+library(DT)
+library(plyr)
+library(dplyr)
+library(d3Tree)
+library(rhandsontable)
+```
+
+
+In addition, We define the global variables that allow us to locate our data:
+
+```{r globals, include=FALSE}
+# This should define the root folder of the local copy of the git repository at: https://github.com/naturalis/Custom-databases-DNA-sequences, which is
+# automatically defined correctly if we run the present code from within a
+# local clone of the repo and have set the working directory to the script
+# source (in RStudio: Session > Set working directory > To source file location)
+
+REPO_HOME <- paste(dirname(getwd()), sep = "")
+```
+
+
+### Public Sequence Data (BOLD)
+
+We now load the list of taxa for the matching species.
+
+```{r Data, include=FALSE}
+bold.file1 <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
+
+
+# Taxa to table
+taxa <- read.csv(bold.file1, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name")]
+
+# Dataframe of unique taxa count
+taxa_unique <- count(taxa, phylum_name,class_name,order_name,family_name,genus_name,species_name) %>% ungroup()
+```
+
+
+### Chart A
+
+```{r}
+# Compute and draw a collapsible tree
+collapsibleTreeSummary(
+  taxa_unique,
+  hierarchy = c("phylum_name", "class_name", "order_name", "family_name", "genus_name", "species_name"),
+  height = 1000,
+  width = 1500,
+  zoomable = TRUE,
+  attribute = "n",
+  maxPercent = 50
+)
+
+datatable(taxa_unique, options = list(pageLength = 5))
+```
