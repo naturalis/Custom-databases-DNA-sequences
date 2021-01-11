@@ -7,7 +7,7 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 <!-- ABOUT THE PROJECT -->
 ## Project goals
 
-Using an export from the Dutch Species Register (NSR)  with a full taxonomic breakdown, including synonyms and expected species, (see `data/NSR exports/`) running the script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only and writing matching/non-matching sequence data to their allocated files. Periodically performed, a custom database can be created and kept up to date regarding new or changes to the public sequence data of interest.
+Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, (see `data/NSR exports/`) running the script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only and writing matching/non-matching sequence data to their allocated files. An analyses of these records can then be made to examine their coverage and gain more insight into the data. Periodically performed, a custom database can be created and kept up to date regarding new or changes to the public sequence data of interest.
 
 ### Workflow
 ![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Flowchart.png?raw=true)
