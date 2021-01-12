@@ -14,17 +14,12 @@ The following libraries and scripts need to be loaded:
 
 ```{r libraries, include=FALSE}
 library(rmarkdown)
-library(flexdashboard)
-library(crosstalk)
-library(collapsibleTree)
-library(reshape2)
-library(shiny)
-library(stringr)
-library(DT)
-library(plyr)
+library(taxize)
+library(myTAI)
 library(dplyr)
-library(d3Tree)
-library(rhandsontable)
+library(tidyr)
+library(collapsibleTree)
+library(DT)
 ```
 
 
@@ -40,35 +35,77 @@ REPO_HOME <- paste(dirname(getwd()), sep = "")
 ```
 
 
-### Public Sequence Data (BOLD)
+Gathering data
+--------------
 
-We now load the list of taxa for the matching species.
+### Reference Data (NSR)
 
-```{r Data, include=FALSE}
-bold.file1 <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
+Ideally a full taxonomic hierarchy of species from the NSR would be used as reference. As only the scientific names has been given, classification of these species can be extrated from a database of choice. Records will be parsed into a dataframe.
+
+```{r NSR, include=FALSE}
+# Locate NSR species
+NSR_Species <- sprintf('%s/data/NSR_exports/NSR_species.txt', REPO_HOME)
+nsr_lst <- read.csv(NSR_Species, header=FALSE)
+
+# Extrat taxonomic classification
+# Change DB to either ncbi, itis, gbif, bold
+nsr_lstoutput <- apply(nsr_lst, 1, function(x) classification(sci_id=x, db="bold", rows=1))
+
+# Parse out the taxonomy levels that you require
+nsr_ldata <- unlist(nsr_lstoutput,recursive=FALSE,use.names=TRUE)
+df_nsr <- tibble(names = names(nsr_ldata), nsr_ldata) %>% 
+  unnest() %>% 
+  filter(rank %in% c("phylum","class","order","family","genus","species")) %>% 
+  select(-id) %>% 
+  spread(rank, name) %>% 
+  select(name = names, phylum, class, order, family, genus, species)
+df_nsr$name <- NULL
 
 
-# Taxa to table
-taxa <- read.csv(bold.file1, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name")]
-
-# Dataframe of unique taxa count
-taxa_unique <- count(taxa, phylum_name,class_name,order_name,family_name,genus_name,species_name) %>% ungroup()
 ```
 
 
-### Chart A
+### Public Sequence Data (BOLD)
 
-```{r}
+We now load the list of taxa for the obtained public sequence data.
+
+```{r BOLD, include=FALSE}
+bold.file <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
+
+# Taxa to table
+df_bold <- read.csv(bold.file, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name")]
+```
+
+
+Computing plots
+---------------
+
+### Counting coverage
+
+Calculating the coverage of the public sequence data against its reference.
+
+```{r Coverage, include=FALSE}
+coverage <- as.data.frame(table(factor(df_bold$species_name,levels=unique(df_nsr$species))))
+colnames(coverage) <- c("species","bold_records")
+
+df3 <- dplyr::left_join(df_nsr, coverage, by = "species")
+
+```
+
+
+### Draw Tree
+
+```{r Tree, warning=FALSE}
 # Compute and draw a collapsible tree
 collapsibleTreeSummary(
-  taxa_unique,
-  hierarchy = c("phylum_name", "class_name", "order_name", "family_name", "genus_name", "species_name"),
+  df3,
+  hierarchy = c("phylum", "class", "order", "family", "genus", "species"),
   height = 1000,
   width = 1500,
   zoomable = TRUE,
-  attribute = "n",
+  attribute = "bold_records",
   maxPercent = 50
 )
 
-datatable(taxa_unique, options = list(pageLength = 5))
+datatable(df3, options = list(pageLength = 5))
 ```
