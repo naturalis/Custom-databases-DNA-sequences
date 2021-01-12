@@ -22,11 +22,11 @@ library(myTAI)
 library(dplyr)
 library(tidyr)
 library(collapsibleTree)
-library(DT)
-library(d3Tree)
 library(shiny)
+library(DT)
 library(plyr)
 library(dplyr)
+library(d3Tree)
 ```
 
 In addition, We define the global variables that allow us to locate our
@@ -92,21 +92,28 @@ df3 <- dplyr::left_join(df_nsr, coverage, by = "species")
 
 ### Draw Tree
 
-Computing and drawing a collapsible tree, and its datatable.
+Computing and drawing a collapsible tree, including reactive table.
 
 ```{r include=FALSE}
 m=df3%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
 
 ui <- fluidPage(
-  fluidRow(
-    uiOutput("Hierarchy"),
-    verbatimTextOutput("results"),
-    tableOutput("clickView"),
-    d3treeOutput(outputId="d3",width = '1200px',height = '800px'),
-    dataTableOutput('table')
-    )
-)
+    fluidRow(
+      column(6,
+             uiOutput("Hierarchy"),
+             tableOutput("clickView"),
+             d3treeOutput(outputId="d3", height="800px")
+             
+             
+      ),
+      column(6,
+             "Reactive Table",
+             div(DT::dataTableOutput(outputId="table"),
+                 style = "font-size:80%")
+             )
+      )
+  )
 
 server <- function(input, output, session) {
   
@@ -155,7 +162,7 @@ server <- function(input, output, session) {
         p=m%>%select(one_of(c(input$Hierarchy,"NEWCOL")))%>%unique
       }
       
-     d3tree(data = list(root = df2tree(struct = p,rootname = 'taxa_unique'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species","bold_records"),height = 18)
+     d3tree(data = list(root = df2tree(struct = p,rootname = 'df3'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species","bold_records"),height = 18)
     })
 })
   
@@ -167,9 +174,11 @@ server <- function(input, output, session) {
     })    
   })
 
-  output$table <- renderTable(expr = {
+  output$table <- DT::renderDataTable(expr = {
     TreeStruct()%>%select(-NEWCOL)
-  })
+  },
+  options=list(scrollX=T,title="Reactive Table")
+  )
 
 }
   
