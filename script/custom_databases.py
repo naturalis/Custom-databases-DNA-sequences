@@ -138,7 +138,7 @@ def nsr_synonyms():
 def nsr_combined(species, synonyms):
     """
     Combines the scientific names of obtained taxonomy and synonyms
-    to one list. Subselects all genera.
+    to one list. Stores all species to external file. Subselects all genera.
     Arguments:
         genera: List of all unique genera
     Return:
@@ -147,6 +147,11 @@ def nsr_combined(species, synonyms):
     # Combine taxa
     species.extend(synonyms)
     species = sorted(set(species))
+
+    # Write species to file
+    with open(args.input_dir+"/nsr_species.txt", "w") as f:
+        for i in species:
+            f.write('%s\n' % i)
 
     # Subselect genera
     genera = [i.split()[0] for i in species]
