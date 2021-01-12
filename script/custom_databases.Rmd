@@ -8,7 +8,10 @@ output: html_document
 Introduction
 ------------
 
-The following R markdown file performs the steps needed to search out and visualize overlap / gaps between obtained public sequence data (using the custom_databases.py script) and its reference by the Dutch Species Register.
+The following R markdown file performs the steps needed to search out
+and visualize overlap / gaps between obtained public sequence data
+(using the custom_databases.py script) and its reference by the Dutch
+Species Register.
 
 The following libraries and scripts need to be loaded:
 
@@ -22,8 +25,8 @@ library(collapsibleTree)
 library(DT)
 ```
 
-
-In addition, We define the global variables that allow us to locate our data:
+In addition, We define the global variables that allow us to locate our
+data:
 
 ```{r globals, include=FALSE}
 # This should define the root folder of the local copy of the git repository at: https://github.com/naturalis/Custom-databases-DNA-sequences, which is
@@ -34,13 +37,12 @@ In addition, We define the global variables that allow us to locate our data:
 REPO_HOME <- paste(dirname(getwd()), sep = "")
 ```
 
-
-Gathering data
---------------
-
 ### Reference Data (NSR)
 
-Ideally a full taxonomic hierarchy of species from the NSR would be used as reference. As only the scientific names has been given, classification of these species can be extrated from a database of choice. Records will be parsed into a dataframe.
+Ideally a full taxonomic hierarchy of species from the NSR would be used
+as reference. As only the scientific names has been given, classification
+of these species can be extrated from a database of choice. Records will
+be parsed into a dataframe.
 
 ```{r NSR, include=FALSE}
 # Locate NSR species
@@ -64,7 +66,6 @@ df_nsr$name <- NULL
 
 ```
 
-
 ### Public Sequence Data (BOLD)
 
 We now load the list of taxa for the obtained public sequence data.
@@ -75,10 +76,6 @@ bold.file <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
 # Taxa to table
 df_bold <- read.csv(bold.file, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name")]
 ```
-
-
-Computing plots
----------------
 
 ### Counting coverage
 
@@ -94,6 +91,9 @@ df3 <- dplyr::left_join(df_nsr, coverage, by = "species")
 
 
 ### Draw Tree
+
+Computing and drawing a collapsible tree, and its datatable.
+(Yet to be made interactive)
 
 ```{r Tree, warning=FALSE}
 # Compute and draw a collapsible tree
