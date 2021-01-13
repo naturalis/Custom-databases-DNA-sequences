@@ -10,12 +10,11 @@ Introduction
 
 The following R markdown file performs the steps needed to search out
 and visualize overlap / gaps between obtained public sequence data
-(using the custom_databases.py script) and its reference by the Dutch
-Species Register.
+and its reference by the Dutch Species Register.
 
-The following libraries and scripts need to be loaded:
+The following libraries need to be loaded:
 
-```{r libraries, include=FALSE}
+```{r libraries, include=FALSE, message=FALSE, warning=FALSE}
 library(rmarkdown)
 library(taxize)
 library(myTAI)
@@ -29,36 +28,36 @@ library(dplyr)
 library(d3Tree)
 ```
 
-In addition, We define the global variables that allow us to locate our
-data:
+In addition, here We define the global variables that we will reuse throughout the code:
 
 ```{r globals, include=FALSE}
 # This should define the root folder of the local copy of the git repository at: https://github.com/naturalis/Custom-databases-DNA-sequences, which is
 # automatically defined correctly if we run the present code from within a
 # local clone of the repo and have set the working directory to the script
 # source (in RStudio: Session > Set working directory > To source file location)
-
 REPO_HOME <- paste(dirname(getwd()), sep = "")
 ```
 
 ### Reference Data (NSR)
 
-Ideally a full taxonomic hierarchy of species from the NSR would be used
-as reference. As only the scientific names has been given, classification
-of these species can be extrated from a database of choice. Records will
-be parsed into a dataframe.
+We now load the reference data for our tree. Ideally a full taxonomic
+hierarchy of species from the NSR would be used as reference. As only the
+scientific names has been given, classification of these species can be
+extrated from a database of choice (ncbi, itis, gbif, bold).
 
 ```{r NSR, include=FALSE}
-# Locate NSR species
+# Load species from the NSR file
 NSR_Species <- sprintf('%s/data/NSR_exports/NSR_species.txt', REPO_HOME)
 nsr_lst <- read.csv(NSR_Species, header=FALSE)
 
-# Extrat taxonomic classification
-# Change DB to either ncbi, itis, gbif, bold
+# Retrieve taxonomic hierarchy for each species
+# Change DB to either ncbi, itis, gbif, or bold
 nsr_lstoutput <- apply(nsr_lst, 1, function(x) classification(sci_id=x, db="bold", rows=1))
 
-# Parse out the taxonomy levels that you require
+# Unlist nested list data
 nsr_ldata <- unlist(nsr_lstoutput,recursive=FALSE,use.names=TRUE)
+
+# Parse out the taxonomy levels that you require
 df_nsr <- tibble(names = names(nsr_ldata), nsr_ldata) %>% 
   unnest() %>% 
   filter(rank %in% c("phylum","class","order","family","genus","species")) %>% 
@@ -70,32 +69,48 @@ df_nsr$name <- NULL
 
 ### Public Sequence Data (BOLD)
 
-We now load the list of taxa for the obtained public sequence data.
+Subsequently, We load the list of taxa from our obtained public sequence
+data from our [script](custom_databases.py).
 
 ```{r BOLD, include=FALSE}
+# The location of the matching public sequence data
 bold.file <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
 
-# Taxa to table
-df_bold <- read.csv(bold.file, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name")]
+# Turn the file into a dataframe
+df_bold <- read.csv(bold.file, sep = "\t", row.names=NULL)[c("phylum_name","class_name","order_name","family_name","genus_name","species_name","markercode")]
+
+# Replace missing markers with NA
+df_bold[df_bold==""]<-NA
 ```
 
-### Counting coverage
+### Calculations
 
-Calculating the coverage of the public sequence data against its reference.
+Now we will reconcile the two data sets by adding the matching markercodes from the public dataset to the reference dataset and counting all duplicate rows, on the intersection of a common species name.
 
 ```{r Coverage, include=FALSE}
-coverage <- as.data.frame(table(factor(df_bold$species_name,levels=unique(df_nsr$species))))
-colnames(coverage) <- c("species","bold_records")
+# Merge datasets, adding the public markers to the reference dataset
+df_marker <- Reduce(function(x, y) merge(x, y, by.x=c("phylum","class","order","family","genus","species"), by.y=c("phylum_name","class_name","order_name","family_name","genus_name","species_name"), all.x=TRUE), list(df_nsr, df_bold))
 
-df3 <- dplyr::left_join(df_nsr, coverage, by = "species")
+# Given multiple identical markers per species, count duplicates
+df_coverage <- count(df_marker[, -1])
+
+# Remove count for species not present in public dataset
+df_coverage <- within(df_coverage, {
+    f <- is.na(markercode) == TRUE
+    freq[f] <- NA
+})
+
+# Cleanup; Drop boolean row and rename frequency of duplicate
+df_coverage$f <- NULL
+names(df_coverage)[length(names(df_coverage))]<-"count"
 ```
 
-### Draw Tree
+### Construct tree
 
-Computing and drawing a collapsible tree, including reactive table.
+Compute and draw reactive shiny filters through collapsible d3js tree
 
 ```{r include=FALSE}
-m=df3%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
+m=df_coverage%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
 
 ui <- fluidPage(
@@ -162,7 +177,7 @@ server <- function(input, output, session) {
         p=m%>%select(one_of(c(input$Hierarchy,"NEWCOL")))%>%unique
       }
       
-     d3tree(data = list(root = df2tree(struct = p,rootname = 'df3'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species","bold_records"),height = 18)
+     d3tree(data = list(root = df2tree(struct = p,rootname = 'NSR'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species", "markercode", "count"))
     })
 })
   
