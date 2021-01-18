@@ -16,7 +16,7 @@ The following libraries need to be loaded:
 
 ```{r libraries, include=FALSE, message=FALSE, warning=FALSE}
 library(rmarkdown)
-library(taxize)
+library(taxizedb)
 library(myTAI)
 library(dplyr)
 library(tidyr)
@@ -48,23 +48,36 @@ extrated from a database of choice (ncbi, itis, gbif, bold).
 ```{r NSR, include=FALSE}
 # Load species from the NSR file
 NSR_Species <- sprintf('%s/data/NSR_exports/NSR_species.txt', REPO_HOME)
-nsr_lst <- read.csv(NSR_Species, header=FALSE)
+nsr_vec <- readLines(NSR_Species)
 
-# Retrieve taxonomic hierarchy for each species
-# Change DB to either ncbi, itis, gbif, or bold
-nsr_lstoutput <- apply(nsr_lst, 1, function(x) classification(sci_id=x, db="bold", rows=1))
+# Download taxonomic database	
+# data source: NCBI	
+db_download_ncbi()
 
-# Unlist nested list data
-nsr_ldata <- unlist(nsr_lstoutput,recursive=FALSE,use.names=TRUE)
+# Convert NSR species names to NCBI taxon IDs
+ncbi_taxid <- taxizedb::name2taxid(nsr_vec, db="ncbi", out_type="summary")
+ncbi_in <- as.vector(ncbi_taxid$id)
+
+# Retrieve taxonomic hierarchy for each taxon ID
+ncbi_out <- taxizedb::classification(ncbi_in, db = "ncbi", row=1, verbose=FALSE)
 
 # Parse out the taxonomy levels that you require
-df_nsr <- tibble(names = names(nsr_ldata), nsr_ldata) %>% 
-  unnest() %>% 
-  filter(rank %in% c("phylum","class","order","family","genus","species")) %>% 
-  select(-id) %>% 
-  spread(rank, name) %>% 
-  select(name = names, phylum, class, order, family, genus, species)
-df_nsr$name <- NULL
+taxdata = data.frame()
+for(x in 1:length(ncbi_out)){
+    tryCatch({
+      phylum=filter(ncbi_out[[x]], rank =="phylum")$name
+      class=filter(ncbi_out[[x]], rank =="class")$name
+      order=filter(ncbi_out[[x]], rank =="order")$name
+      family=filter(ncbi_out[[x]], rank =="family")$name
+      genus=filter(ncbi_out[[x]], rank =="genus")$name
+      species=filter(ncbi_out[[x]], rank =="species")$name
+
+      row <- data.frame(cbind(phylum=phylum,class=class,order=order,family=family,
+                              genus=genus,species=species))
+      taxdata <- bind_rows(taxdata, row)    
+    }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+write.csv(taxdata, file=sprintf('%s/data/NSR_exports/taxdata-full.txt', REPO_HOME))
 ```
 
 ### Public Sequence Data (BOLD)
@@ -89,10 +102,10 @@ Now we will reconcile the two data sets by adding the matching markercodes from 
 
 ```{r Coverage, include=FALSE}
 # Merge datasets, adding the public markers to the reference dataset
-df_marker <- Reduce(function(x, y) merge(x, y, by.x=c("phylum","class","order","family","genus","species"), by.y=c("phylum_name","class_name","order_name","family_name","genus_name","species_name"), all.x=TRUE), list(df_nsr, df_bold))
+df_marker <- Reduce(function(x, y) merge(x, y, by.x=c("phylum","class","order","family","genus","species"), by.y=c("phylum_name","class_name","order_name","family_name","genus_name","species_name"), all.x=TRUE), list(taxdata, df_bold))
 
 # Given multiple identical markers per species, count duplicates
-df_coverage <- count(df_marker[, -1])
+df_coverage <- count(df_marker)
 
 # Remove count for species not present in public dataset
 df_coverage <- within(df_coverage, {
@@ -119,8 +132,6 @@ ui <- fluidPage(
              uiOutput("Hierarchy"),
              tableOutput("clickView"),
              d3treeOutput(outputId="d3", height="800px")
-             
-             
       ),
       column(6,
              "Reactive Table",
@@ -177,7 +188,7 @@ server <- function(input, output, session) {
         p=m%>%select(one_of(c(input$Hierarchy,"NEWCOL")))%>%unique
       }
       
-     d3tree(data = list(root = df2tree(struct = p,rootname = 'NSR'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species", "markercode", "count"))
+     d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout = 'collapse'),activeReturn = c("phylum", "class", "order", "family", "genus", "species", "markercode", "count"))
     })
 })
   
@@ -194,7 +205,7 @@ server <- function(input, output, session) {
   },
   options=list(scrollX=T,title="Reactive Table")
   )
-
+  
 }
   
 shinyApp(ui, server)
