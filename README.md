@@ -70,7 +70,7 @@ python custom_databases.py -input_dir ../data/NSR_exports -outfile1 match.fasta 
 #### Prerequisites
 * R version 4.0.3
 
-The following libraries are used:
+The following packages are used:
 
   * rmarkdown 2.6
   * taxizedb 0.3.0
