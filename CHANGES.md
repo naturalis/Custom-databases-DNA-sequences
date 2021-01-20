@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## 20/01/2021
+- Add data classification & analyses file `/script/custom_databases.Rmd`
+- Updating data structure; add and populate `/results` folder
+
 ## 19/11/2020
 
 - Archiving obtained BOLD sequence data in a single zip file
