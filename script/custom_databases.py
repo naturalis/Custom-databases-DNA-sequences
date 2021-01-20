@@ -138,7 +138,8 @@ def nsr_synonyms():
 def nsr_combined(species, synonyms):
     """
     Combines the scientific names of obtained taxonomy and synonyms
-    to one list. Stores all species to external file. Subselects all genera.
+    to one list. Stores all species, indexed, as csv file.
+    Subselects all unique genera for use in the BOLD pipeline.
     Arguments:
         genera: List of all unique genera
     Return:
@@ -149,12 +150,19 @@ def nsr_combined(species, synonyms):
     species = sorted(set(species))
 
     # Write species to file
-    with open(args.input_dir+"/nsr_species.txt", "w") as f:
+    index = 0
+    with open(par_path+"/results/species.csv", "w") as f:
+        f.write('"species_id","species_name"\n')
         for i in species:
-            f.write('%s\n' % i)
+            f.write('%s,%s\n' % (index,i))
+            index += 1
 
     # Subselect genera
     genera = [i.split()[0] for i in species]
+
+    # Drop genera duplicates
+    genera = list(dict.fromkeys(genera))
+
     return species, genera
 
 
@@ -262,7 +270,7 @@ def bold_output(file, line):
         header: List of record fields to be emitted
         f: Outputfile, either match or mismatch depending on parameter
     """
-##    # Fasta format
+    # Fasta format
 ##    # Ensure record contains sequence data
 ##    if bool(line.get('nucleotides')) == True:
 ##        # Define record fields to use
