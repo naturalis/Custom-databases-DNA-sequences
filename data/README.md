@@ -1,4 +1,4 @@
-# Data types
+# Data
 
 Brief explanation of the use and source of each dataset.
 
@@ -14,7 +14,7 @@ All sequence data is compared against species from the NSR. In case of any misma
 
 
 ## BOLD exports
-Using BOLD’s Public Data Portal [API](http://boldsystems.org/index.php/resources/api?type=webservices) genera are retrieved one genus at a time and saved to the allocated folder (`BOLD_exports/genera.tsv`).
+Using BOLD’s Public Data Portal [API](http://boldsystems.org/index.php/resources/api?type=webservices) genera are retrieved one genus at a time and saved to the allocated folder (example file at `BOLD_exports/genera.tsv`).
 To acquire as much information as possible, the [FASTA files](https://en.wikipedia.org/wiki/FASTA_format) consisting of sequences holds all possible fields, including but not limited to Process ID, Species Name, Markercode, Genbank Accession, Catalognumber, Researchers, Geographic site, and Nucleotides of each species.
 Reducing storage requirements, all files are archived in a single zip file.
 
