@@ -1,7 +1,7 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "11 January 2021"
+date: "20 January 2021"
 output: html_document
 ---
 
@@ -27,10 +27,12 @@ library(d3Tree)
 library(billboarder)
 ```
 
-In addition, here We define the global variables that we will reuse throughout the code:
+In addition, here We define the global variables that we will reuse throughout
+the code:
 
 ```{r globals, include=FALSE}
-# This should define the root folder of the local copy of the git repository at: https://github.com/naturalis/Custom-databases-DNA-sequences, which is
+# This should define the root folder of the local copy of the git repository at:
+# https://github.com/naturalis/Custom-databases-DNA-sequences, which is
 # automatically defined correctly if we run the present code from within a
 # local clone of the repo and have set the working directory to the script
 # source (in RStudio: Session > Set working directory > To source file location)
@@ -45,8 +47,8 @@ We now load the following data sets:
 2. Obtained Public Sequence Data (BOLD),
 3. List of Marker Codes
 
-Both the Reference Data set (1) and the Obtained Public Sequence Data (2) are output from
-our [script](../script/custom_databases.py)
+Both the Reference Data set (1) and the Obtained Public Sequence Data (2) are
+output from the [script](../script/custom_databases.py)
 
 ```{r datasets, include=FALSE}
 # Load species from the NSR file
@@ -66,9 +68,9 @@ markers <- read.csv(markers.file, header=TRUE, sep=",")
 
 ### Classification
 
-Ideally a full taxonomic hierarchy of species would be used as reference data set. As
-only the scientific names have been given, classification of these species will be
-extracted from a database of choice (ncbi, itis, gbif, col, wfo).
+Ideally a full taxonomic hierarchy of species would be used as reference dataset.
+As only the scientific names have been given, classification of these species
+will be extracted from a database of choice (ncbi, itis, gbif, col, wfo).
 
 ```{r classification, include=FALSE}
 # Download taxonomic database
@@ -98,32 +100,34 @@ for(x in 1:length(treeOut)){
       c.genus=filter(treeOut[[x]], rank =="genus")$name
       c.species=filter(treeOut[[x]], rank =="species")$name
 
-      row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,family=c.family,
-                              genus=c.genus,species=c.species))
+      row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
+                              family=c.family,genus=c.genus,species=c.species))
       taxdata <- bind_rows(taxdata, row)
     }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
+
+# Write unique hierarchies to file
+taxdata <- unique(taxdata)
 write.csv(taxdata, file=sprintf('%s/results/taxdata-full.csv', REPO_HOME),
           row.names=FALSE)
-
-taxdataUnique <- unique(taxdata)
 
 # Clean-up
 rm(c.phylum,c.class,c.order,c.family,c.genus,c.species,x,row)
 ```
 
-### Analyses
+### Create data structure
 
-Now we will consolidate the three data sets, creating a more streamlined data structure
-which allows us to track information between each source.
+Now we will consolidate the three data sets, creating a more streamlined
+data structure which allows us to track information between each source.
 
 ```{r combine, include=FALSE}
 # Joining the initial loaded data sets on common data intersections
-species_markers <- right_join(species, bold[c("species_name","markercode")], by=c("species_name")) %>%
+species_markers <- right_join(species, bold[c("species_name","markercode")],
+                              by=c("species_name")) %>%
   group_by_all() %>% summarise(.groups="keep", counts = n()) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
 
-# Formatting; Remove unwanted columns, add unique prefix, re-sort
+# Formatting; Remove unwanted columns, add unique prefix, rearrange
 species_markers <- within(species_markers, {
   species_name <- NULL
   markercode <- NULL
@@ -131,9 +135,132 @@ species_markers <- within(species_markers, {
 }) %>% .[, c(4,1,3,2)] %>% .[complete.cases(.[ , 2]),]
 
 # Write data as csv to output folder
-write.csv(species_markers, file=sprintf('%s/results/species_markers.csv', REPO_HOME),
-          row.names=FALSE)
+write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
+                                        REPO_HOME),row.names=FALSE)
 
 # Save workspace image
 save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
+```
+
+### Load Tree
+
+To perform an analyses on our species we now load the tree for our reference data set. This
+is their complete tree populated with our collected data, where we seek out overlap / gaps
+between the two. We will reconcile these data sets later on.
+
+```{r visualisation, include=FALSE}
+# Dataframe: Get backbone, marker names, and count for each species
+vis.tree <- inner_join(species, taxdata, by=c("species_name" = "species")) %>%
+  left_join(., species_markers[c("species_id","marker_id","counts")],
+            by=c("species_id")) %>%
+  left_join(., markers, by=c("marker_id"))
+
+# Formatting
+vis.tree <- within(vis.tree, {
+  
+  # Set no matching species to count 0
+  f <- is.na(counts) == TRUE
+  counts[f] <- 0
+  
+  # Remove obsolete rows
+  species_id <- NULL
+  marker_id <- NULL
+  f <- NULL
+
+}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange
+```
+
+### Perform visualisation
+
+Compute and draw reactive shiny filters through collapsible d3js tree
+
+```{r include=FALSE}
+m=vis.tree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
+
+ui <- fluidPage(
+    fluidRow(
+      column(6,
+             uiOutput("Hierarchy"),
+             tableOutput("clickView"),
+             d3treeOutput(outputId="d3", height="800px")
+      ),
+      column(6,
+             "Reactive Table",
+             div(DT::dataTableOutput(outputId="table"),
+                 style = "font-size:80%")
+             )
+      )
+  )
+
+server <- function(input, output, session) {
+  
+  #SearchTree----
+  
+  output$Hierarchy <- renderUI({
+    Hierarchy=names(m)
+    Hierarchy=head(Hierarchy,-1)
+    selectizeInput("Hierarchy","Tree Hierarchy",
+                   choices = Hierarchy,multiple=T,selected = Hierarchy,
+                   options=list(plugins=list('drag_drop','remove_button')))
+  })
+  
+  network <- reactiveValues()
+  
+  observeEvent(input$d3_update,{
+    network$nodes <- unlist(input$d3_update$.nodesData)
+    activeNode<-input$d3_update$.activeNode
+    if(!is.null(activeNode)) network$click <- jsonlite::fromJSON(activeNode)
+  })
+  
+  observeEvent(network$click,{
+    output$clickView<-renderTable({
+      as.data.frame(network$click)
+    },caption='Last Clicked Node',caption.placement='top')
+  })
+ 
+  
+  TreeStruct=eventReactive(network$nodes,{
+    df=m
+    if(is.null(network$nodes)){
+      df=m
+    }else{
+      
+      x.filter=tree.filter(network$nodes,m)
+      df=ddply(x.filter,.(ID),function(a.x){m%>%filter_(.dots = list(a.x$FILTER))%>%distinct})
+    }
+    df
+  })
+  
+  observeEvent(input$Hierarchy,{
+    output$d3 <- renderD3tree({
+      if(is.null(input$Hierarchy)){
+        p=m
+      }else{
+        p=m%>%select(one_of(c(input$Hierarchy,"NEWCOL")))%>%unique
+      }
+      
+     d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout =
+                          'collapse'),activeReturn = c("phylum", "class", "order",
+                                                       "family", "genus", "species",
+                                                       "markercode", "count"))
+    })
+})
+  
+  observeEvent(network$nodes,{
+    output$results <- renderPrint({
+      str.out=''
+      if(!is.null(network$nodes)) str.out=tree.filter(network$nodes,m)
+      return(str.out)
+    })    
+  })
+
+  output$table <- DT::renderDataTable(expr = {
+    TreeStruct()%>%select(-NEWCOL)
+  },
+  options=list(scrollX=T,title="Reactive Table")
+  )
+
+}
+  
+shinyApp(ui, server)
 ```
