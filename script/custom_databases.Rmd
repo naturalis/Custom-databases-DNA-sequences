@@ -1,16 +1,20 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "20 January 2021"
+date: "21 January 2021"
 output: html_document
+runtime: shiny
 ---
 
 Introduction
 ------------
 
-The following R markdown file performs the steps needed to search out
-and visualize overlap / gaps between obtained public sequence data
-and its reference provided by the Dutch Species Register (NSR).
+The following R markdown file performs the steps needed to:
+
+1. Create a more streamlined data structure, which allows us to track all information
+of the species of interest between the various datasets.
+2. Search out and visualize the coverage between the obtained public sequence data and
+its reference from the Dutch Species Register (NSR).
 
 The following libraries need to be loaded:
 
@@ -45,7 +49,8 @@ We now load the following data sets:
 
 1. Reference data set (NSR),
 2. Obtained Public Sequence Data (BOLD),
-3. List of Marker Codes
+3. List of Marker Codes,
+4. List of Public Databases
 
 Both the Reference Data set (1) and the Obtained Public Sequence Data (2) are
 output from the [script](../script/custom_databases.py)
@@ -64,6 +69,10 @@ bold <- read.csv(bold.file, header=TRUE, sep="\t", row.names=NULL,
 # Load marker data set
 markers.file <- sprintf('%s/results/markers.csv', REPO_HOME)
 markers <- read.csv(markers.file, header=TRUE, sep=",")
+
+# Load database data set
+databases.file <- sprintf('%s/results/databases.csv', REPO_HOME)
+databases <- read.csv(databases.file, header=TRUE, sep=",")
 ```
 
 ### Classification
@@ -92,18 +101,18 @@ treeOut <- taxizedb::classification(treeIn, db="ncbi", row=1, verbose=FALSE)
 # Parse out the taxonomy levels that you require
 taxdata = data.frame()
 for(x in 1:length(treeOut)){
-    tryCatch({
-      c.phylum=filter(treeOut[[x]], rank =="phylum")$name
-      c.class=filter(treeOut[[x]], rank =="class")$name
-      c.order=filter(treeOut[[x]], rank =="order")$name
-      c.family=filter(treeOut[[x]], rank =="family")$name
-      c.genus=filter(treeOut[[x]], rank =="genus")$name
-      c.species=filter(treeOut[[x]], rank =="species")$name
-
-      row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
-                              family=c.family,genus=c.genus,species=c.species))
-      taxdata <- bind_rows(taxdata, row)
-    }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  tryCatch({
+    c.phylum=filter(treeOut[[x]], rank =="phylum")$name
+    c.class=filter(treeOut[[x]], rank =="class")$name
+    c.order=filter(treeOut[[x]], rank =="order")$name
+    c.family=filter(treeOut[[x]], rank =="family")$name
+    c.genus=filter(treeOut[[x]], rank =="genus")$name
+    c.species=filter(treeOut[[x]], rank =="species")$name
+    
+    row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
+                            family=c.family,genus=c.genus,species=c.species))
+    taxdata <- bind_rows(taxdata, row)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
 # Write unique hierarchies to file
@@ -127,12 +136,16 @@ species_markers <- right_join(species, bold[c("species_name","markercode")],
   group_by_all() %>% summarise(.groups="keep", counts = n()) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
 
-# Formatting; Remove unwanted columns, add unique prefix, rearrange
+# Formatting
 species_markers <- within(species_markers, {
+  #Remove obsolete columns
   species_name <- NULL
   markercode <- NULL
+  
+  # Add unique prefix and database ID
   sm_id <- seq.int(nrow(species_markers))
-}) %>% .[, c(4,1,3,2)] %>% .[complete.cases(.[ , 2]),]
+  database_id <- 1
+}) %>% .[, c(5,1,4,3,2)] %>% .[complete.cases(.[ , 2]),] # Rearrange and remove NAs
 
 # Write data as csv to output folder
 write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
@@ -148,12 +161,13 @@ To perform an analyses on our species we now load the tree for our reference dat
 is their complete tree populated with our collected data, where we seek out overlap / gaps
 between the two. We will reconcile these data sets later on.
 
-```{r visualisation, include=FALSE}
+```{r tree-data, include=FALSE}
 # Dataframe: Get backbone, marker names, and count for each species
 vis.tree <- inner_join(species, taxdata, by=c("species_name" = "species")) %>%
-  left_join(., species_markers[c("species_id","marker_id","counts")],
+  left_join(., species_markers[c("species_id","database_id", "marker_id","counts")],
             by=c("species_id")) %>%
-  left_join(., markers, by=c("marker_id"))
+  left_join(., markers, by=c("marker_id")) %>%
+  left_join(., databases, by=c("database_id"))
 
 # Formatting
 vis.tree <- within(vis.tree, {
@@ -165,32 +179,42 @@ vis.tree <- within(vis.tree, {
   # Remove obsolete rows
   species_id <- NULL
   marker_id <- NULL
+  database_id <- NULL
   f <- NULL
-
-}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange
+  
+}) %>% .[, c(2,3,4,5,6,1,7,8,9)] # Rearrange
 ```
 
 ### Perform visualisation
 
 Compute and draw reactive shiny filters through collapsible d3js tree
 
-```{r include=FALSE}
+```{r tree-visualisation}
 m=vis.tree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
 ui <- fluidPage(
-    fluidRow(
-      column(6,
-             uiOutput("Hierarchy"),
-             tableOutput("clickView"),
-             d3treeOutput(outputId="d3", height="800px")
-      ),
-      column(6,
-             "Reactive Table",
-             div(DT::dataTableOutput(outputId="table"),
-                 style = "font-size:80%")
-             )
-      )
+  fluidRow(
+    column(6,
+           uiOutput("Hierarchy"),
+           tableOutput("clickView"),
+           d3treeOutput(outputId="d3", height="800px")
+    ),
+    column(6,
+           "Reactive Table",
+           div(DT::dataTableOutput(outputId="table"),
+               style = "font-size:80%")
+           
+    )
+  ),
+  
+  hr(),
+  
+  fluidRow(
+    column(8,billboarderOutput(outputId="billboarder")
+    ),
+    column(4,billboarderOutput(outputId="markerPie"))
   )
+)
 
 server <- function(input, output, session) {
   
@@ -217,7 +241,7 @@ server <- function(input, output, session) {
       as.data.frame(network$click)
     },caption='Last Clicked Node',caption.placement='top')
   })
- 
+  
   
   TreeStruct=eventReactive(network$nodes,{
     df=m
@@ -239,12 +263,11 @@ server <- function(input, output, session) {
         p=m%>%select(one_of(c(input$Hierarchy,"NEWCOL")))%>%unique
       }
       
-     d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout =
-                          'collapse'),activeReturn = c("phylum", "class", "order",
-                                                       "family", "genus", "species",
-                                                       "markercode", "count"))
+      d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout = 'collapse'),
+             activeReturn = c("phylum", "class", "order", "family", "genus", "species_name",
+                              "count", "marker_name", "database_name" ))
     })
-})
+  })
   
   observeEvent(network$nodes,{
     output$results <- renderPrint({
@@ -253,14 +276,52 @@ server <- function(input, output, session) {
       return(str.out)
     })    
   })
-
+  
   output$table <- DT::renderDataTable(expr = {
     TreeStruct()%>%select(-NEWCOL)
   },
   options=list(scrollX=T,title="Reactive Table")
   )
-
-}
   
+  output$billboarder <- renderBillboarder(expr = {
+    dfActive <- TreeStruct()%>%select(-NEWCOL)
+    nsrTotal <- unlist(lapply(dfActive[1:6], function(x) length(unique(x))))
+    
+    boldTotal <- subset(dfActive,database_name=="BOLD")
+    boldTotal <- unlist(lapply(boldTotal[1:6], function(x) length(unique(x))))
+    boldCov <- as.vector(boldTotal / nsrTotal * 100)
+    
+    vis.cov <- data.frame(
+      taxa = paste(names(m)[0:6]),
+      nsr_total = nsrTotal,
+      bold_total = boldCov
+    )
+    
+    billboarder() %>%
+      bb_barchart(
+        data = vis.cov[, c("taxa", "bold_total")]
+      ) %>%
+      bb_data(
+        names = list(bold_total = "bold")
+      ) %>%
+      bb_y_grid(show = TRUE) %>%
+      bb_y_axis(tick = list(format = suffix("%")),
+                label = list(text = "Percentage of taxa covered", position = "outer-top")) %>%
+      bb_legend(position = "inset", inset = list(anchor = "top-right")) %>%
+      bb_labs(title = "Coverage of taxa")
+  })
+  
+  output$markerPie <- renderBillboarder(expr = {
+    dfActive <- TreeStruct()%>%select(-NEWCOL)
+    vis.marker <- setNames(aggregate(dfActive$counts, list(dfActive$marker_name),
+                                     FUN=sum), c("marker_name", "counts"))
+    
+    billboarder() %>%
+      bb_piechart(data = vis.marker) %>%
+      bb_labs(title = "Share of markers")
+  })
+  
+}
+
 shinyApp(ui, server)
 ```
