@@ -1,7 +1,7 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "21 January 2021"
+date: "26 January 2021"
 output: html_document
 runtime: shiny
 ---
@@ -79,10 +79,10 @@ databases <- read.csv(databases.file, header=TRUE, sep=",")
 
 Ideally a full taxonomic hierarchy of species would be used as reference dataset.
 As only the scientific names have been given, classification of these species
-will be extracted from a database of choice (ncbi, itis, gbif, col, wfo).
+will be extracted from a database of choice.
 
 ```{r classification, include=FALSE}
-# Download taxonomic database
+# Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
 # data source: NCBI
 db_download_ncbi()
 
@@ -98,7 +98,7 @@ treeIn <- as.vector(taxidOut$id)
 # Retrieve taxonomic hierarchy for each taxon ID
 treeOut <- taxizedb::classification(treeIn, db="ncbi", row=1, verbose=FALSE)
 
-# Parse out the taxonomy levels that you require
+# Parse out the taxonomy levels/factors that you require
 taxdata = data.frame()
 for(x in 1:length(treeOut)){
   tryCatch({
@@ -108,20 +108,33 @@ for(x in 1:length(treeOut)){
     c.family=filter(treeOut[[x]], rank =="family")$name
     c.genus=filter(treeOut[[x]], rank =="genus")$name
     c.species=filter(treeOut[[x]], rank =="species")$name
+    c.taxID=filter(treeOut[[x]], rank =="species")$id
     
     row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
-                            family=c.family,genus=c.genus,species=c.species))
+                            family=c.family,genus=c.genus,species=c.species,taxID=c.taxID))
     taxdata <- bind_rows(taxdata, row)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-# Write unique hierarchies to file
+# Match hierarchies to NSR species names by taxon IDs
+# Accounting for use of synonym names within NCBI 
 taxdata <- unique(taxdata)
-write.csv(taxdata, file=sprintf('%s/results/taxdata-full.csv', REPO_HOME),
+
+taxdata_full <- left_join(taxidOut, taxdata, by=c("id" = "taxID")) %>%
+  left_join(., species, by=c("name" = "species_name")) %>%
+  tibble::rowid_to_column(., "taxdata_id") %>%
+  .[, c(1,10,9,4,5,6,7,8,2,3)] # Reaarange columns
+
+# Adjust Header
+names(taxdata_full) <- c("taxdata_id", "node_id", "node_name", "phylum", "class", "order",
+                         "family", "genus", "species", "taxonomy_id")
+
+# Write taxonomic data to file
+write.csv(taxdata_full, file=sprintf('%s/results/taxdata.csv', REPO_HOME),
           row.names=FALSE)
 
 # Clean-up
-rm(c.phylum,c.class,c.order,c.family,c.genus,c.species,x,row)
+rm(c.phylum, c.class, c.order, c.family, c.genus, c.species, c.taxID, x, row, taxdata)
 ```
 
 ### Create data structure
@@ -130,10 +143,10 @@ Now we will consolidate the three data sets, creating a more streamlined
 data structure which allows us to track information between each source.
 
 ```{r combine, include=FALSE}
-# Joining the initial loaded data sets on common data intersections
-species_markers <- right_join(species, bold[c("species_name","markercode")],
+# Joining the initial loaded data sets (NSR Species & BOLD) on common data intersections
+# Subsequently, change out markercode for marker names
+species_markers <- right_join(species, bold[c("species_name","markercode","sequenceID")],
                               by=c("species_name")) %>%
-  group_by_all() %>% summarise(.groups="keep", counts = n()) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
 
 # Formatting
@@ -142,7 +155,7 @@ species_markers <- within(species_markers, {
   species_name <- NULL
   markercode <- NULL
   
-  # Add unique prefix and database ID
+  # Add unique prefix and database ID (in case of BOLD: "1")
   sm_id <- seq.int(nrow(species_markers))
   database_id <- 1
 }) %>% .[, c(5,1,4,3,2)] %>% .[complete.cases(.[ , 2]),] # Rearrange and remove NAs
@@ -162,27 +175,29 @@ is their complete tree populated with our collected data, where we seek out over
 between the two. We will reconcile these data sets later on.
 
 ```{r tree-data, include=FALSE}
-# Dataframe: Get backbone, marker names, and count for each species
-vis.tree <- inner_join(species, taxdata, by=c("species_name" = "species")) %>%
-  left_join(., species_markers[c("species_id","database_id", "marker_id","counts")],
+# Dataframe: Get backbone, marker names, and database for each species
+vis.tree <- inner_join(species, taxdata_full[c(2,4:8)], by=c("species_id" = "node_id")) %>%
+  left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
   left_join(., markers, by=c("marker_id")) %>%
   left_join(., databases, by=c("database_id"))
 
-# Formatting
+# Formatting: Remove obsolete rows
 vis.tree <- within(vis.tree, {
-  
-  # Set no matching species to count 0
-  f <- is.na(counts) == TRUE
-  counts[f] <- 0
-  
-  # Remove obsolete rows
   species_id <- NULL
   marker_id <- NULL
   database_id <- NULL
+}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange
+
+# Add count
+vis.tree <- vis.tree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
+
+# Set non matching species to count 0
+vis.tree <- within(vis.tree, {
+  f <- is.na(marker_name) == TRUE
+  counts[f] <- 0
   f <- NULL
-  
-}) %>% .[, c(2,3,4,5,6,1,7,8,9)] # Rearrange
+})
 ```
 
 ### Perform visualisation
@@ -265,7 +280,7 @@ server <- function(input, output, session) {
       
       d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout = 'collapse'),
              activeReturn = c("phylum", "class", "order", "family", "genus", "species_name",
-                              "count", "marker_name", "database_name" ))
+                              "counts", "marker_name", "database_name" ))
     })
   })
   
@@ -282,13 +297,15 @@ server <- function(input, output, session) {
   },
   options=list(scrollX=T,title="Reactive Table")
   )
-  
+
+  #Grahps----  
+
   output$billboarder <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
     nsrTotal <- unlist(lapply(dfActive[1:6], function(x) length(unique(x))))
     
-    boldTotal <- subset(dfActive,database_name=="BOLD")
-    boldTotal <- unlist(lapply(boldTotal[1:6], function(x) length(unique(x))))
+    boldActive <- subset(dfActive,database_name=="BOLD")
+    boldTotal <- unlist(lapply(boldActive[1:6], function(x) length(unique(x))))
     boldCov <- as.vector(boldTotal / nsrTotal * 100)
     
     vis.cov <- data.frame(
