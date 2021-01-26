@@ -7,7 +7,7 @@ CREATE TABLE "species" (
 );
 
 CREATE TABLE "taxdata" (
-  "taxdata_id" INTEGER NOT NULL,
+	"taxdata_id"	INTEGER NOT NULL,
 	"node_id"	INTEGER NOT NULL,
 	"node_name"	TEXT NOT NULL,
 	"phylum"	TEXT NOT NULL,
@@ -17,8 +17,8 @@ CREATE TABLE "taxdata" (
 	"genus"	TEXT NOT NULL,
 	"species"	TEXT NOT NULL,
 	"taxonomy_id"	INTEGER NOT NULL,
-	FOREIGN KEY("node_id") REFERENCES "species"("species_id"),
-	PRIMARY KEY("taxdata_id")
+	PRIMARY KEY("taxdata_id"),
+	FOREIGN KEY("node_id") REFERENCES "species"("species_id")
 );
 
 CREATE TABLE "species_markers" (
@@ -27,10 +27,10 @@ CREATE TABLE "species_markers" (
 	"database_id"	INTEGER NOT NULL,
 	"marker_id"	INTEGER NOT NULL,
 	"sequence_id"	INTEGER NOT NULL,
-	FOREIGN KEY("marker_id") REFERENCES "markers"("marker_id"),
-	FOREIGN KEY("species_id") REFERENCES "species"("species_id"),
+	PRIMARY KEY("sm_id"),
 	FOREIGN KEY("database_id") REFERENCES "databases"("database_id"),
-	PRIMARY KEY("sm_id")
+	FOREIGN KEY("marker_id") REFERENCES "markers"("marker_id"),
+	FOREIGN KEY("species_id") REFERENCES "species"("species_id")
 );
 
 CREATE TABLE "markers" (
