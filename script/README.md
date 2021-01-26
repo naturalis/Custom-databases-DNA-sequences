@@ -8,6 +8,10 @@ Using an export from the Dutch Species Register (NSR) with a full taxonomic brea
 
 
 ## custom_databases.Rmd
-The  R markdown file performs the steps needed to:
+The R markdown file performs the steps needed to:
 1. Create a more streamlined data structure which allows us to track all information of the species of interest between the various datasets.
 2. Search out and visualize the coverage between the obtained public sequence data and its reference from the Dutch Species Register (NSR).
+
+
+## schema.sql
+Contains the elements and relations needed to create a SQLite database. Able to be populated with the projects output files (see `results/`).
