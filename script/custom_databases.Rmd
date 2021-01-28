@@ -111,7 +111,7 @@ for(x in 1:length(treeOut)){
     c.taxID=filter(treeOut[[x]], rank =="species")$id
     
     row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
-                            family=c.family,genus=c.genus,species=c.species,taxID=c.taxID))
+                            family=c.family,genus=c.genus,node_name=c.species,tax_id=c.taxID))
     taxdata <- bind_rows(taxdata, row)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
@@ -120,14 +120,13 @@ for(x in 1:length(treeOut)){
 # Accounting for use of synonym names within NCBI 
 taxdata <- unique(taxdata)
 
-taxdata_full <- left_join(taxidOut, taxdata, by=c("id" = "taxID")) %>%
+taxdata_full <- left_join(taxidOut, taxdata, by=c("id" = "tax_id")) %>%
   left_join(., species, by=c("name" = "species_name")) %>%
-  tibble::rowid_to_column(., "taxdata_id") %>%
-  .[, c(1,10,9,4,5,6,7,8,2,3)] # Reaarange columns
+  .[, c(2,9,3,4,5,6,7,1,8)] # Reaarange columns
 
 # Adjust Header
-names(taxdata_full) <- c("taxdata_id", "node_id", "node_name", "phylum", "class", "order",
-                         "family", "genus", "species", "taxonomy_id")
+names(taxdata_full) <- c("tax_id", "species_id", "phylum", "class", "order", "family",
+                         "genus", "species", "node_name")
 
 # Write taxonomic data to file
 write.csv(taxdata_full, file=sprintf('%s/results/taxdata.csv', REPO_HOME),
@@ -176,7 +175,7 @@ between the two. We will reconcile these data sets later on.
 
 ```{r tree-data, include=FALSE}
 # Dataframe: Get backbone, marker names, and database for each species
-vis.tree <- inner_join(species, taxdata_full[c(2,4:8)], by=c("species_id" = "node_id")) %>%
+vis.tree <- inner_join(species, taxdata_full[c(2:7)], by=c("species_id")) %>%
   left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
   left_join(., markers, by=c("marker_id")) %>%

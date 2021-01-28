@@ -7,18 +7,17 @@ CREATE TABLE "species" (
 );
 
 CREATE TABLE "taxdata" (
-	"taxdata_id"	INTEGER NOT NULL,
-	"node_id"	INTEGER NOT NULL,
-	"node_name"	TEXT NOT NULL,
+	"tax_id"	INTEGER NOT NULL,
+	"species_id"	INTEGER NOT NULL,
 	"phylum"	TEXT NOT NULL,
 	"class"	TEXT NOT NULL,
 	"order"	TEXT NOT NULL,
 	"family"	TEXT NOT NULL,
 	"genus"	TEXT NOT NULL,
 	"species"	TEXT NOT NULL,
-	"taxonomy_id"	INTEGER NOT NULL,
-	PRIMARY KEY("taxdata_id"),
-	FOREIGN KEY("node_id") REFERENCES "species"("species_id")
+	"node_name"	TEXT NOT NULL,
+	PRIMARY KEY("tax_id", "species_id"),
+	FOREIGN KEY("species_id") REFERENCES "species"("species_id")
 );
 
 CREATE TABLE "species_markers" (
