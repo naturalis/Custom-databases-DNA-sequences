@@ -2,9 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## 20/01/2021
+## 26/01/2021
 - Add data classification & analyses file `/script/custom_databases.Rmd`
 - Updating data structure; add and populate `/results` folder
+- Creating database schema
 
 ## 19/11/2020
 
