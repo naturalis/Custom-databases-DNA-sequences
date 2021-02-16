@@ -11,9 +11,10 @@
 
 The following libraries are used:
 
-  * Argparse 1.1
+  * argparse 1.1
   * csv 1.0
   * Pandas 1.0.5
+  * re 2.2.1
   * urllib3 1.25.9
 
 ## Part 2: Data classification & analyses

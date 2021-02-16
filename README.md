@@ -7,14 +7,15 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 <!-- ABOUT THE PROJECT -->
 ## Project goals
 
-Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, (see `data/NSR_exports/`) running the python script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only and writing matching/non-matching sequence data to their allocated files (see `data/FASTA_files/`). These are then, subsequently, used for the following:
+Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, (see `data/NSR_exports/`) running the python script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filtered on geographic site, accepted names from the NSR will be adopted on matching synonyms, before writing matching/non-matching sequence data to their allocated files (see `data/FASTA_files/`). Resulting files are, subsequently, used to:
 
-- To create a more streamlined data structure which allows us to track all information of the species of interest between the various datasets. Making it possible to execute more elaborate querries due to its linked structure.
-- To search out and visualize the overlap / gaps between the obtained Public Sequence Data (BOLD) and its reference provided by the Dutch Species Register (NSR).
+- Create a data structure capable of providing highly visual representations and at the same time maintaining integrity of each data set’s origin.
+- Search out and visualize the overlap / gaps between the obtained Public Sequence Data (BOLD) and a reference provided by the Naturalis Biodiversity center, in correlation to the NSR.
+- Assess the quality and reliability of public sequence data.
 
 ### Workflow
 ![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Flowchart.png?raw=true)
-
+*The general workflow for retrieving sequence data from BOLD, in which corresponding specimen data with sequence records were obtained using an export from the NSR.*
 
 
 <!-- GETTING STARTED -->
@@ -29,9 +30,10 @@ Instructions and requirements to get a local copy up and running. See also the [
 
 The following libraries are used:
 
-  * Argparse 1.1
+  * argparse 1.1
   * csv 1.0
   * Pandas 1.0.5
+  * re 2.2.1
   * urllib3 1.25.9
  
 #### Installation
@@ -43,26 +45,26 @@ Or, download the latest [source code](script/custom_databases.py)
 
 #### Usage
 
-Navigate to the installation directory and run the python script.
+Navigate to the installation directory and run the python script. Parameters are by default  set to a file/directory within a local github clone.
 
 ```
-Usage: custom_databases.py [OPTIONS]
+usage: custom_databases.py [-h] [-indir INDIR] [-infile1 INFILE1] [-infile2 INFILE2] [-outdir1 OUTDIR1] [-outdir2 OUTDIR2] [-outfile1 OUTFILE1] [-outfile2 OUTFILE2]
 
-Optional arguments:
-  -h, --help                Display this message
-  -input_dir                Input file directory
-  -infile1                  NSR Taxonomy input file
-  -infile2                  NSR Synonym input file
-  -output_dir1              Public sequence data output directory
-  -output_dir2              Outfile1/2 output directory
-  -outfile1                 Matching records
-  -outfile2                 Non-matching records
+optional arguments:
+  -h, --help          show this help message and exit
+  -indir INDIR        Input folder: NSR export directory
+  -infile1 INFILE1    Input file 1: NSR taxonomy export
+  -infile2 INFILE2    Input file 2: NSR synonyms export
+  -outdir1 OUTDIR1    Output folder 1: BOLD export directory
+  -outdir2 OUTDIR2    Output folder 2: Result data directory
+  -outfile1 OUTFILE1  Output file 1: Matching records
+  -outfile2 OUTFILE2  Output file 2: Non-matching records
 ```
 
-Using any of the optional user arguments allows for the user to change the input/output destination of the files and folders. Example:
+Using any of the optional user arguments allows for the user to change the input/output destination of the files and directories. Example of argument usage:
 
 ```sh
-python custom_databases.py -input_dir ../data/NSR_exports -outfile1 match.fasta -outfile2 mismatch.fasta -output_dir1 ../data/BOLD_exports -output_dir2 ../data/FASTA_files
+python custom_databases.py -indir ../data/NSR_exports -outdir1 ../data/BOLD_exports -outdir2 ../data/FASTA_files -outfile1 match.tsv -outfile2 mismatch.tsv
 ```
 
 ### Part 2: Data classification & analyses

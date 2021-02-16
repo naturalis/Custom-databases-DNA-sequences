@@ -4,14 +4,13 @@ Brief description of each script.
 
 
 ## custom_databases.py
-Using an export from the Dutch Species Register (NSR) with a full taxonomic breakdown, including synonyms and expected species, running the script allows for its list of species to be compared against matching genera extracted using BOLD's Public Data Portal API. Filterting to Dutch records only, it writes matching/non-matching sequence data to their allocated files. Subsequently, it saves the original list of species for future reference.
-
+Using an export from the Dutch Species Register (NSR), the script harvests the scientific notation of species, including synonyms and expected species. Extracted taxonomy is used, by means of genera, to obtain matching specimens and sequence data from the Barcode of Life Data System (BOLD) database. Filtered on geographic site, accepted names from the NSR will be adopted on matching synonyms.
 
 ## custom_databases.Rmd
 The R markdown file performs the steps needed to:
-1. Create a more streamlined data structure which allows us to track all information of the species of interest between the various datasets.
-2. Search out and visualize the coverage between the obtained public sequence data and its reference from the Dutch Species Register (NSR).
+1. Create a data structure capable of providing highly visual representations and at the same time maintaining integrity of each data set’s origin.
+2. Search out and visualize the coverage between the obtained public sequence data and its reference from the Dutch Species Register (NSR), in correlation to the NSR.
 
 
 ## schema.sql
-Contains the elements and relations needed to create a SQLite database. Able to be populated with the projects output files (see `results/`).
+Represents the logical configurations for the creation of the SQLite database. Able to be populated with the project's output files (see `results/`).
