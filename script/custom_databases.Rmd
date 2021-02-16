@@ -1,7 +1,7 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "26 January 2021"
+date: "16 February 2021"
 output: html_document
 runtime: shiny
 ---
@@ -11,10 +11,12 @@ Introduction
 
 The following R markdown file performs the steps needed to:
 
-1. Create a more streamlined data structure, which allows us to track all information
-of the species of interest between the various datasets.
-2. Search out and visualize the coverage between the obtained public sequence data and
-its reference from the Dutch Species Register (NSR).
+1. Create a data structure capable of providing highly visual representations and at the
+same time maintaining integrity of each data set’s origin.
+2. Search out and visualize the overlap / gaps between the obtained Public Sequence Data
+(BOLD) and a reference provided by the Naturalis Biodiversity center, in correlation to
+the NSR.
+3. Assess the quality and reliability of public sequence data.
 
 The following libraries need to be loaded:
 
@@ -29,6 +31,7 @@ library(plyr)
 library(dplyr)
 library(d3Tree)
 library(billboarder)
+library(nbaR)
 ```
 
 In addition, here We define the global variables that we will reuse throughout
@@ -47,22 +50,22 @@ REPO_HOME <- paste(dirname(getwd()), sep = "")
 
 We now load the following data sets:
 
-1. Reference data set (NSR),
+1. Reference Data Set (NSR),
 2. Obtained Public Sequence Data (BOLD),
 3. List of Marker Codes,
 4. List of Public Databases
 
-Both the Reference Data set (1) and the Obtained Public Sequence Data (2) are
+Both the Reference Data Set (1) and the Obtained Public Sequence Data (2) are
 output from the [script](../script/custom_databases.py)
 
 ```{r datasets, include=FALSE}
 # Load species from the NSR file
-species.file <- sprintf('%s/results/species.csv', REPO_HOME)
-species <- read.csv(species.file, header=TRUE, sep=",")
+species.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
+species <- read.csv(species.file)
 
 # Load public sequence data
 # Set missing values to na
-bold.file <- sprintf('%s/data/FASTA_files/match.fasta', REPO_HOME)
+bold.file <- sprintf('%s/data/FASTA_files/match.tsv', REPO_HOME)
 bold <- read.csv(bold.file, header=TRUE, sep="\t", row.names=NULL,
                  na.strings=c(""," ","NA"))
 
@@ -77,19 +80,24 @@ databases <- read.csv(databases.file, header=TRUE, sep=",")
 
 ### Classification
 
-Ideally a full taxonomic hierarchy of species would be used as reference dataset.
-As only the scientific names have been given, classification of these species
-will be extracted from a database of choice.
+Ideally, a full taxonomic hierarchy of species would be used as a reference data set. As
+the NSR export only held the scientific names of all species of interest, the assigned
+identification number of each record will be used to obtain their higher taxa.
+
+
+### Additional taxonmy
+The ability to divert to another taxonomy could prove useful in certain situations. 
+Classification of species will hence be extrated from a database of choice for later use.
 
 ```{r classification, include=FALSE}
 # Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
-# data source: NCBI
+# Used data source: NCBI
 db_download_ncbi()
 
 # Load species names from the NSR data set
 taxidIn <- species[, "species_name"]
 
-# Convert species names to taxon IDs
+# Match species names to NCBI taxon IDs
 taxidOut <- taxizedb::name2taxid(taxidIn, db="ncbi", out_type="summary")
 
 # Isolate taxon IDs from output, save as vector
@@ -117,7 +125,7 @@ for(x in 1:length(treeOut)){
 }
 
 # Match hierarchies to NSR species names by taxon IDs
-# Accounting for use of synonym names within NCBI 
+# Accounting for use of synonym names within NCBI
 taxdata <- unique(taxdata)
 
 taxdata_full <- left_join(taxidOut, taxdata, by=c("id" = "tax_id")) %>%
@@ -138,14 +146,15 @@ rm(c.phylum, c.class, c.order, c.family, c.genus, c.species, c.taxID, x, row, ta
 
 ### Create data structure
 
-Now we will consolidate the three data sets, creating a more streamlined
+Now we will consolidate the various data sets, creating a more streamlined
 data structure which allows us to track information between each source.
 
 ```{r combine, include=FALSE}
 # Joining the initial loaded data sets (NSR Species & BOLD) on common data intersections
 # Subsequently, change out markercode for marker names
-species_markers <- right_join(species, bold[c("species_name","markercode","sequenceID")],
-                              by=c("species_name")) %>%
+species_markers <- right_join(species, bold[c("species_name","markercode","sequenceID",
+                                              "identification_reference")],
+                              by=c("species_name", "identification_reference")) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
 
 # Formatting
@@ -153,6 +162,7 @@ species_markers <- within(species_markers, {
   #Remove obsolete columns
   species_name <- NULL
   markercode <- NULL
+  identification_reference <- NULL
   
   # Add unique prefix and database ID (in case of BOLD: "1")
   sm_id <- seq.int(nrow(species_markers))
@@ -171,7 +181,7 @@ save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
 
 To perform an analyses on our species we now load the tree for our reference data set. This
 is their complete tree populated with our collected data, where we seek out overlap / gaps
-between the two. We will reconcile these data sets later on.
+between the two.
 
 ```{r tree-data, include=FALSE}
 # Dataframe: Get backbone, marker names, and database for each species
@@ -184,9 +194,10 @@ vis.tree <- inner_join(species, taxdata_full[c(2:7)], by=c("species_id")) %>%
 # Formatting: Remove obsolete rows
 vis.tree <- within(vis.tree, {
   species_id <- NULL
+  identification_reference <- NULL
   marker_id <- NULL
   database_id <- NULL
-}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange
+}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange columns
 
 # Add count
 vis.tree <- vis.tree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
@@ -204,8 +215,10 @@ vis.tree <- within(vis.tree, {
 Compute and draw reactive shiny filters through collapsible d3js tree
 
 ```{r tree-visualisation}
+# Define tree data ----
 m=vis.tree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
+# Define UI for application ----
 ui <- fluidPage(
   fluidRow(
     column(6,
@@ -217,12 +230,11 @@ ui <- fluidPage(
            "Reactive Table",
            div(DT::dataTableOutput(outputId="table"),
                style = "font-size:80%")
-           
     )
   ),
-  
+
   hr(),
-  
+
   fluidRow(
     column(8,billboarderOutput(outputId="billboarder")
     ),
@@ -230,10 +242,10 @@ ui <- fluidPage(
   )
 )
 
+# Define server logic ----
 server <- function(input, output, session) {
   
-  #SearchTree----
-  
+  # Tree Hierarchy ----
   output$Hierarchy <- renderUI({
     Hierarchy=names(m)
     Hierarchy=head(Hierarchy,-1)
@@ -242,6 +254,7 @@ server <- function(input, output, session) {
                    options=list(plugins=list('drag_drop','remove_button')))
   })
   
+  # Observer ----
   network <- reactiveValues()
   
   observeEvent(input$d3_update,{
@@ -269,6 +282,7 @@ server <- function(input, output, session) {
     df
   })
   
+  # Render tree
   observeEvent(input$Hierarchy,{
     output$d3 <- renderD3tree({
       if(is.null(input$Hierarchy)){
@@ -291,14 +305,14 @@ server <- function(input, output, session) {
     })    
   })
   
+  # Reactive table
   output$table <- DT::renderDataTable(expr = {
     TreeStruct()%>%select(-NEWCOL)
   },
   options=list(scrollX=T,title="Reactive Table")
   )
 
-  #Grahps----  
-
+  # Grahps ----
   output$billboarder <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
     nsrTotal <- unlist(lapply(dfActive[1:6], function(x) length(unique(x))))
@@ -308,11 +322,11 @@ server <- function(input, output, session) {
     boldCov <- as.vector(boldTotal / nsrTotal * 100)
     
     vis.cov <- data.frame(
-      taxa = paste(names(m)[0:6]),
-      nsr_total = nsrTotal,
+      taxa = paste(names(m)[1:6]),
       bold_total = boldCov
     )
     
+    # Barchart Taxa
     billboarder() %>%
       bb_barchart(
         data = vis.cov[, c("taxa", "bold_total")]
@@ -327,6 +341,7 @@ server <- function(input, output, session) {
       bb_labs(title = "Coverage of taxa")
   })
   
+  # Marker Pie Chart
   output$markerPie <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
     vis.marker <- setNames(aggregate(dfActive$counts, list(dfActive$marker_name),
