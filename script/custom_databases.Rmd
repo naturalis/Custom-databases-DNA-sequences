@@ -59,9 +59,12 @@ Both the Reference Data Set (1) and the Obtained Public Sequence Data (2) are
 output from the [script](../script/custom_databases.py)
 
 ```{r datasets, include=FALSE}
-# Load species from the NSR file
-species.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
-species <- read.csv(species.file)
+# Load species and synonyms from the NSR files
+nsrSpecies.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
+nsrSpecies <- read.csv(nsrSpecies.file)
+
+nsrSynonyms.file <- sprintf('%s/data/NSR_exports/synonyms_extract.csv', REPO_HOME)
+nsrSynonyms <- read.csv(nsrSynonyms.file)
 
 # Load public sequence data
 # Set missing values to na
@@ -78,36 +81,122 @@ databases.file <- sprintf('%s/results/databases.csv', REPO_HOME)
 databases <- read.csv(databases.file, header=TRUE, sep=",")
 ```
 
-### Classification
+### NSR Backbone
 
 Ideally, a full taxonomic hierarchy of species would be used as a reference data set. As
-the NSR export only held the scientific names of all species of interest, the assigned
-identification number of each record will be used to obtain their higher taxa.
+the NSR export only held the scientific names of all species of interest, the Netherlands
+Biodiversity API will be queried to obtain their higher taxa.
 
+```{r nsrBackbone, include=FALSE}
+## Taxonomy to retrieve the hierarchy from
+nsrIn <- tolower(nsrSpecies[, "species_name"])
+
+## Query NSR taxon records (duration: ~40m)
+queryParams <- list("sourceSystem.code"="NSR")
+nsrSpecimens <- data.frame()
+for(x in 1:length(nsrIn)){
+  queryParams[["acceptedName.scientificNameGroup"]] <- nsrIn[x]
+  nsrSpecimens <- bind_rows(nsrSpecimens, taxon_query(queryParams))
+}
+
+## Access required taxonomic fields
+nsrBackbone = data.frame()
+for(x in 1:nrow(nsrSpecimens)){
+  tryCatch({
+    c.kingdom=nsrSpecimens$defaultClassification$kingdom[x]
+    c.phylum=nsrSpecimens$defaultClassification$phylum[x]
+    c.class=nsrSpecimens$defaultClassification$className[x]
+    c.order=nsrSpecimens$defaultClassification$order[x]
+    c.family=nsrSpecimens$defaultClassification$family[x]
+    c.genus=nsrSpecimens$defaultClassification$genus[x]
+    c.species=nsrSpecimens$acceptedName$specificEpithet[x]
+    c.authority=nsrSpecimens$acceptedName$authorshipVerbatim[x]
+    
+    row <- data.frame(cbind(kingdom=c.kingdom,phylum=c.phylum,class=c.class,order=c.order,
+                            family=c.family,genus=c.genus,species=paste(c.genus,c.species),
+                            identification_reference=c.authority))
+    nsrBackbone <- bind_rows(nsrBackbone, row)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+## Remove parenthesis
+nsrBackbone$identification_reference = gsub("[()]", "", nsrBackbone$identification_reference)
+
+## Clean up query variables
+rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
+```
+
+### Naturalis Coverage
+
+To determine the overlap / gaps between the obtained public sequence data and our reference
+at the Naturalis Biodiversity Center, in relation to the NSR, we query the Naturalis specimen
+records (using the Netherlands Biodiversity API) to obtain their coverage of species.
+
+```{r natCoverage, include=FALSE}
+## Taxonomy to retrieve the hierarchy from
+natIn <- unique(gsub("([A-Za-z]+).*", "\\1", nsrSpecies$species_name))
+
+## Query Naturalis specimen records (duration: ~20m)
+queryParams <- list()
+natSpecimens <- data.frame()
+for(x in 1:length(natIn)){
+  queryParams[["identifications.scientificName.genusOrMonomial"]] <- natIn[x]
+  natSpecimens <- bind_rows(natSpecimens, specimen_query(queryParams))
+}
+
+## Access required taxonomic fields
+natSpecies = data.frame()
+for(x in 1:nrow(natSpecimens)){
+  tryCatch({
+    c.genus=natSpecimens$identifications[[x]]$defaultClassification$genus
+    c.species=natSpecimens$identifications[[x]]$defaultClassification$specificEpithet
+    c.count=natSpecimens$numberOfSpecimen[[x]]
+    
+    row <- data.frame(cbind(species=paste(c.genus,c.species),counts=c.count))
+    natSpecies <- bind_rows(natSpecies, row)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+## Remove NAs, sum unique species record counts, add DB identifier
+natSpecies <- natSpecies[complete.cases(natSpecies), ]
+natSpecies$counts <- as.numeric(as.character(natSpecies$count))
+natSpecies <- aggregate(counts ~ species, data=natSpecies, FUN=sum)
+natSpecies$database_name <- "NATURALIS"
+
+## Cross-check and isolate matching species for specimen records
+nsrTotal <- full_join(nsrSpecies[c(2:3)], nsrSynonyms[c(2:3)],
+                    by=c("species_name"="synonym_name",
+                         "identification_reference"))
+natCoverage <- left_join(nsrTotal, natSpecies, by=c("species_name"="species"))
+
+## Clean up query variables
+rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
+```
 
 ### Additional taxonmy
+
 The ability to divert to another taxonomy could prove useful in certain situations. 
 Classification of species will hence be extrated from a database of choice for later use.
 
-```{r classification, include=FALSE}
-# Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
-# Used data source: NCBI
+```{r altTaxdata, include=FALSE}
+## Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
+## Used data source: NCBI
 db_download_ncbi()
 
-# Load species names from the NSR data set
-taxidIn <- species[, "species_name"]
+## Load species names from the NSR data set
+taxidIn <- nsrSpecies[, "species_name"]
 
-# Match species names to NCBI taxon IDs
+## Match species names to NCBI taxon IDs
 taxidOut <- taxizedb::name2taxid(taxidIn, db="ncbi", out_type="summary")
 
-# Isolate taxon IDs from output, save as vector
+## Isolate taxon IDs from output, save as vector
 treeIn <- as.vector(taxidOut$id)
 
-# Retrieve taxonomic hierarchy for each taxon ID
+## Retrieve taxonomic hierarchy for each taxon ID
 treeOut <- taxizedb::classification(treeIn, db="ncbi", row=1, verbose=FALSE)
 
-# Parse out the taxonomy levels/factors that you require
-taxdata = data.frame()
+## Parse out the taxonomy levels/factors that you require
+altTaxdata = data.frame()
 for(x in 1:length(treeOut)){
   tryCatch({
     c.phylum=filter(treeOut[[x]], rank =="phylum")$name
@@ -120,28 +209,27 @@ for(x in 1:length(treeOut)){
     
     row <- data.frame(cbind(phylum=c.phylum,class=c.class,order=c.order,
                             family=c.family,genus=c.genus,node_name=c.species,tax_id=c.taxID))
-    taxdata <- bind_rows(taxdata, row)
+    altTaxdata <- bind_rows(altTaxdata, row)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-# Match hierarchies to NSR species names by taxon IDs
-# Accounting for use of synonym names within NCBI
-taxdata <- unique(taxdata)
-
-taxdata_full <- left_join(taxidOut, taxdata, by=c("id" = "tax_id")) %>%
-  left_join(., species, by=c("name" = "species_name")) %>%
+## Match hierarchies to NSR species names by taxon IDs
+## Accounting for use of synonym names within NCBI
+altTaxdata <- unique(altTaxdata)
+altTaxdata <- left_join(taxidOut, altTaxdata, by=c("id" = "tax_id")) %>%
+  left_join(., nsrSpecies, by=c("name" = "species_name")) %>%
   .[, c(2,9,3,4,5,6,7,1,8)] # Reaarange columns
 
-# Adjust Header
-names(taxdata_full) <- c("tax_id", "species_id", "phylum", "class", "order", "family",
+## Adjust Header
+names(altTaxdata) <- c("tax_id", "species_id", "phylum", "class", "order", "family",
                          "genus", "species", "node_name")
 
-# Write taxonomic data to file
-write.csv(taxdata_full, file=sprintf('%s/results/taxdata.csv', REPO_HOME),
+## Write taxonomic data to file
+write.csv(altTaxdata, file=sprintf('%s/results/taxdata.csv', REPO_HOME),
           row.names=FALSE)
 
-# Clean-up
-rm(c.phylum, c.class, c.order, c.family, c.genus, c.species, c.taxID, x, row, taxdata)
+## Clean-up
+rm(x, row, list = ls()[grep("^c.", ls())])
 ```
 
 ### Create data structure
@@ -149,11 +237,11 @@ rm(c.phylum, c.class, c.order, c.family, c.genus, c.species, c.taxID, x, row, ta
 Now we will consolidate the various data sets, creating a more streamlined
 data structure which allows us to track information between each source.
 
-```{r combine, include=FALSE}
+```{r species_markers, include=FALSE}
 # Joining the initial loaded data sets (NSR Species & BOLD) on common data intersections
 # Subsequently, change out markercode for marker names
-species_markers <- right_join(species, bold[c("species_name","markercode","sequenceID",
-                                              "identification_reference")],
+species_markers <- right_join(nsrSpecies, bold[c("species_name","markercode","sequenceID",
+                                                 "identification_reference")],
                               by=c("species_name", "identification_reference")) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
 
@@ -172,42 +260,59 @@ species_markers <- within(species_markers, {
 # Write data as csv to output folder
 write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
                                         REPO_HOME),row.names=FALSE)
-
-# Save workspace image
-save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
 ```
 
 ### Load Tree
 
-To perform an analyses on our species we now load the tree for our reference data set. This
-is their complete tree populated with our collected data, where we seek out overlap / gaps
-between the two.
+To perform an analyses on our species we now load the backbone of the NSR. This is their
+complete tree, to be populated with our collected data where we seek out overlap / gaps
+between Naturalis and our obtained Public Sequence Data .
 
-```{r tree-data, include=FALSE}
-# Dataframe: Get backbone, marker names, and database for each species
-vis.tree <- inner_join(species, taxdata_full[c(2:7)], by=c("species_id")) %>%
+```{r finalTree, include=FALSE}
+## Get backbone of species, and add coverage of BOLD recrods
+boldTree <- left_join(nsrSpecies, nsrBackbone[c(1:7)], by=c("species_name"="species")) %>%
   left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
   left_join(., markers, by=c("marker_id")) %>%
   left_join(., databases, by=c("database_id"))
 
-# Formatting: Remove obsolete rows
-vis.tree <- within(vis.tree, {
+## Formatting: Remove obsolete rows
+boldTree <- within(boldTree, {
   species_id <- NULL
   identification_reference <- NULL
   marker_id <- NULL
   database_id <- NULL
-}) %>% .[, c(2,3,4,5,6,1,7,8)] # Rearrange columns
+}) %>% .[, c(2,3,4,5,6,7,1,8,9)] # Rearrange columns
 
-# Add count
-vis.tree <- vis.tree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
+## Sum BOLD records
+boldTree <- boldTree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
 
-# Set non matching species to count 0
-vis.tree <- within(vis.tree, {
+## Set non matching species to count 0
+boldTree <- within(boldTree, {
   f <- is.na(marker_name) == TRUE
-  counts[f] <- 0
+  counts[f] <- NA
   f <- NULL
 })
+
+## Add Naturalis records
+natTree <- left_join(nsrBackbone[c(1:7)],
+                       natCoverage[c('species_name','counts','database_name')],
+                       by=c("species"="species_name"))
+natTree$marker_name <- NA
+colnames(natTree)[7] <- "species_name"
+
+## Merge trees
+combTree <- merge(boldTree, natTree,all=TRUE)
+combTree <- unique(combTree)
+combTree <- combTree %>% drop_na(counts)
+
+## Add backbone to tree
+finalTree <- left_join(nsrBackbone[c(1:7)], combTree,
+                      by=c("kingdom","phylum","class","order","family","genus",
+                           "species"="species_name"))
+
+## Save workspace image
+save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
 ```
 
 ### Perform visualisation
@@ -215,10 +320,10 @@ vis.tree <- within(vis.tree, {
 Compute and draw reactive shiny filters through collapsible d3js tree
 
 ```{r tree-visualisation}
-# Define tree data ----
-m=vis.tree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
+## Define tree data ----
+m=finalTree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
-# Define UI for application ----
+## Define UI for application ----
 ui <- fluidPage(
   fluidRow(
     column(6,
@@ -242,7 +347,7 @@ ui <- fluidPage(
   )
 )
 
-# Define server logic ----
+## Define server logic ----
 server <- function(input, output, session) {
   
   # Tree Hierarchy ----
@@ -315,24 +420,29 @@ server <- function(input, output, session) {
   # Grahps ----
   output$billboarder <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
-    nsrTotal <- unlist(lapply(dfActive[1:6], function(x) length(unique(x))))
+    nsrTotal <- unlist(lapply(dfActive[2:8], function(x) length(unique(x))))
     
     boldActive <- subset(dfActive,database_name=="BOLD")
-    boldTotal <- unlist(lapply(boldActive[1:6], function(x) length(unique(x))))
-    boldCov <- as.vector(boldTotal / nsrTotal * 100)
+    boldTotal <- unlist(lapply(boldActive[2:8], function(x) length(unique(x))))
+    boldCov <- as.vector(round((boldTotal/nsrTotal * 100),1))
+    
+    natActive <- subset(dfActive,database_name=="NATURALIS")
+    natTotal <- unlist(lapply(natActive[2:8], function(x) length(unique(x))))
+    natCov <- as.vector(round((natTotal/nsrTotal * 100),1))
     
     vis.cov <- data.frame(
-      taxa = paste(names(m)[1:6]),
-      bold_total = boldCov
+      taxa = paste(names(dfActive)[2:8]),
+      bold_total = boldCov,
+      nat_total = natCov
     )
     
     # Barchart Taxa
     billboarder() %>%
       bb_barchart(
-        data = vis.cov[, c("taxa", "bold_total")]
+        data = vis.cov[, c("taxa", "bold_total", "nat_total")]
       ) %>%
       bb_data(
-        names = list(bold_total = "bold")
+        names = list(bold_total = "bold", nat_total = "naturalis")
       ) %>%
       bb_y_grid(show = TRUE) %>%
       bb_y_axis(tick = list(format = suffix("%")),
@@ -349,7 +459,7 @@ server <- function(input, output, session) {
     
     billboarder() %>%
       bb_piechart(data = vis.marker) %>%
-      bb_labs(title = "Share of markers")
+      bb_labs(title = "Share of markers (BOLD)")
   })
   
 }
