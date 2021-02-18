@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## 26/01/2021
+## 18/02/2021 - (nbaR update)
+- Retrieve NSR's taxonomic backbone
+- Retrieve Naturalis specimen records
+- Calculate and visualize coverage (BOLD/Naturalis vs. NSR)
+
+## 26/01/2021 - (database update)
 - Add data classification & analyses file `/script/custom_databases.Rmd`
 - Updating data structure; add and populate `/results` folder
 - Creating database schema
