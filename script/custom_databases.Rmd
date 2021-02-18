@@ -163,11 +163,18 @@ natSpecies$counts <- as.numeric(as.character(natSpecies$count))
 natSpecies <- aggregate(counts ~ species, data=natSpecies, FUN=sum)
 natSpecies$database_name <- "NATURALIS"
 
-## Cross-check and isolate matching species for specimen records
-nsrTotal <- full_join(nsrSpecies[c(2:3)], nsrSynonyms[c(2:3)],
-                    by=c("species_name"="synonym_name",
-                         "identification_reference"))
-natCoverage <- left_join(nsrTotal, natSpecies, by=c("species_name"="species"))
+## Adopt accepted name if observation of synonym
+nsrSynonyms$species <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Synonym)
+nsrSynonyms$Taxon <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Taxon)
+
+natSynonyms <- left_join(natSpecies, nsrSynonyms[2:3],by=c('species'))
+natSynonyms$Taxon <- coalesce(natSynonyms$Taxon, natSynonyms$species)
+natSynonyms$species <- NULL
+colnames(natSynonyms)[3] <- "species"
+natSynonyms <- natSynonyms[,c(3,1,2)]
+
+## Match species against the NSR
+natCoverage <- left_join(nsrSpecies[c(2:3)], natSynonyms, by=c("species_name"="species"))
 
 ## Clean up query variables
 rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
@@ -310,6 +317,7 @@ combTree <- combTree %>% drop_na(counts)
 finalTree <- left_join(nsrBackbone[c(1:7)], combTree,
                       by=c("kingdom","phylum","class","order","family","genus",
                            "species"="species_name"))
+finalTree <- finalTree[, c(1,2,3,4,5,6,7,10,9,8)]
 
 ## Save workspace image
 save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
@@ -397,8 +405,8 @@ server <- function(input, output, session) {
       }
       
       d3tree(data = list(root = df2tree(struct = p,rootname = 'm'), layout = 'collapse'),
-             activeReturn = c("phylum", "class", "order", "family", "genus", "species_name",
-                              "counts", "marker_name", "database_name" ))
+             activeReturn = c("kingdom", "phylum", "class", "order", "family", "genus",
+                              "species","counts", "database_name", "marker_name" ))
     })
   })
   
@@ -430,19 +438,25 @@ server <- function(input, output, session) {
     natTotal <- unlist(lapply(natActive[2:8], function(x) length(unique(x))))
     natCov <- as.vector(round((natTotal/nsrTotal * 100),1))
     
+    combActive <- subset(dfActive,database_name=="BOLD" | database_name=="NATURALIS")
+    combActive <- combActive[!duplicated(combActive$species),]
+    combTotal <- unlist(lapply(combActive[2:8], function(x) length(unique(x))))
+    combCov <- as.vector(round((combTotal/nsrTotal * 100),1))
+    
     vis.cov <- data.frame(
       taxa = paste(names(dfActive)[2:8]),
       bold_total = boldCov,
-      nat_total = natCov
+      nat_total = natCov,
+      comb_total = combCov
     )
     
     # Barchart Taxa
     billboarder() %>%
       bb_barchart(
-        data = vis.cov[, c("taxa", "bold_total", "nat_total")]
+        data = vis.cov[, c("taxa", "bold_total", "nat_total", "comb_total")]
       ) %>%
       bb_data(
-        names = list(bold_total = "bold", nat_total = "naturalis")
+        names = list(bold_total = "bold", nat_total = "naturalis", comb_total = "combined")
       ) %>%
       bb_y_grid(show = TRUE) %>%
       bb_y_axis(tick = list(format = suffix("%")),
