@@ -116,10 +116,10 @@ def nsrSynonyms(species):
 
     # Extract synonyms
     df_Synonyms = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
-    synonymsMatch = df_Synonyms[df_Synonyms['taxon'].isin(species)]
-    synonymsMatch['species'] = synonymsMatch['synonym'].str.extract(
+    #synonymsMatch = df_Synonyms[df_Synonyms['taxon'].isin(species)]
+    df_Synonyms['species'] = df_Synonyms['synonym'].str.extract(
         r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
-    synonymsMatch = synonymsMatch.dropna()
+    synonymsMatch = df_Synonyms.dropna()
     synonymsList = list(dict.fromkeys(synonymsMatch['species']))
     synonymsList = [re.sub(r"[()]", "", synonym) for synonym in synonymsList]
 
@@ -145,13 +145,23 @@ def nsrOutput(species, synonyms):
     """
     # Write species to file
     index = 0
-    with open(par_path+"/results/species.csv", "w") as f:
+    with open(par_path+"/results/nsr_species.csv", "w") as f:
         f.write('"species_id","species_name","identification_reference"\n')
         for i in species:
             name = ' '.join(str(i).split()[:2])
             identification = ' '.join(str(i).split()[2:])
             f.write('%s,%s,"%s"\n' % (index, name, identification))
             index += 1
+
+    index = 0
+    with open(par_path+"/data/NSR_exports/synonyms_extract.csv", "w") as f:
+        f.write('"synonym_id","synonym_name","identification_reference"\n')
+        for i in synonyms:
+            name = ' '.join(str(i).split()[:2])
+            identification = ' '.join(str(i).split()[2:])
+            f.write('%s,%s,"%s"\n' % (index, name, identification))
+            index += 1
+    
 
     # Combine species with their known synonyms
     combined = sorted(species + synonyms)
