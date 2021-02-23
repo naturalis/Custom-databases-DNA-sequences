@@ -18,12 +18,12 @@ CREATE TABLE "tree_ncbi" (
 );
 
 CREATE TABLE "species_markers" (
-	"species_markers_id" INTEGER NOT NULL,
+	"species_marker_id" INTEGER NOT NULL,
 	"species_id" INTEGER NOT NULL,
 	"database_id" INTEGER NOT NULL,
 	"marker_id" INTEGER NOT NULL,
 	"sequence_id" INTEGER NOT NULL,
-	PRIMARY KEY("species_markers_id"),
+	PRIMARY KEY("species_marker_id"),
 	FOREIGN KEY("database_id") REFERENCES "databases"("database_id"),
 	FOREIGN KEY("marker_id") REFERENCES "markers"("marker_id"),
 	FOREIGN KEY("species_id") REFERENCES "nsr_species"("species_id")

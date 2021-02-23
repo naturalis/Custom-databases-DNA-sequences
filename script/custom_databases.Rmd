@@ -1,7 +1,7 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "22 February 2021"
+date: "23 February 2021"
 output: html_document
 runtime: shiny
 ---
@@ -151,31 +151,30 @@ for(x in 1:nrow(natSpecimens)){
     c.genus=natSpecimens$identifications[[x]]$defaultClassification$genus
     c.species=natSpecimens$identifications[[x]]$defaultClassification$specificEpithet
     c.count=natSpecimens$numberOfSpecimen[[x]]
+    c.id=natSpecimens$id[[x]]
 
-    row <- data.frame(cbind(species=paste(c.genus,c.species),counts=c.count))
+    row <- data.frame(cbind(species=paste(c.genus,c.species),counts=c.count,sequenceID=c.id))
     natSpecies <- bind_rows(natSpecies, row)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-## Remove NAs, sum unique species record counts, add DB/marker identifier
+## Remove NAs, sum unique species record counts
 natSpecies <- natSpecies[complete.cases(natSpecies), ]
 natSpecies$counts <- as.numeric(as.character(natSpecies$count))
-natSpecies <- aggregate(counts ~ species, data=natSpecies, FUN=sum)
-natSpecies$database_name <- "NATURALIS"
-natSpecies$marker_name <- NA
+natSpecies <- aggregate(counts ~ species+sequenceID, data=natSpecies, FUN=sum)
 
 ## Prepare to account for synonymous names
 nsrSynonyms$species <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Synonym)
 nsrSynonyms$Taxon <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Taxon)
 
-## Adopt accepted name if observation of synonym
+## Match and adopt synonymous names
 natSpecies <- left_join(natSpecies, nsrSynonyms[2:3],by=c('species'))
 natSpecies$Taxon <- coalesce(natSpecies$Taxon, natSpecies$species)
-natSpecies <- natSpecies[,c(5,2,3,4)]
-colnames(natSpecies)[1] <- "species"
+natSpecies <- natSpecies[,c(4,3,2)]
+colnames(natSpecies)[1] <- "species_name"
 
 ## Match species against the NSR
-natCoverage <- left_join(nsrSpecies[c(2:3)], natSpecies, by=c("species_name"="species"))
+natCoverage <- merge(natSpecies, nsrSpecies[c(2:3)], by="species_name")
 
 ## Clean up query variables
 rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
@@ -238,7 +237,7 @@ rm(x, row, list = ls()[grep("^c.", ls())])
 ### Create data structure
 
 Now we will consolidate the various data sets, creating a more streamlined
-data structure which allows us to track information between each source.
+data structure while maintaining the integrity of each data set’s origin.
 
 ```{r species_markers, include=FALSE}
 ## Match the NSR species names with the obtained (BOLD) public sequence data
@@ -247,16 +246,29 @@ species_markers <- right_join(nsrSpecies, bold[c("species_name","markercode","se
                                                  "identification_reference")],
                               by=c("species_name", "identification_reference")) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
+species_markers$database_id <- 1
+species_markers$sequenceID <- as.character(species_markers$sequenceID)
 
-## Add a unique identifier for each record, along with BOLD's database ID
+## Prepare Naturalis merge
+naturalis <- left_join(natCoverage, nsrSpecies, by=c("species_name",
+                                                     "identification_reference"))
+naturalis$database_id <- 0
+naturalis$marker_id <- 0
+naturalis$counts <- NULL
+
+## Merge Naturalis records
+species_markers <- merge(species_markers, naturalis,
+                         by=c("species_id","identification_reference","sequenceID",
+                              "database_id","marker_id","species_name"), all=TRUE)
+
+## Add a unique identifier for each record
 species_markers <- within(species_markers, {
-  sm_id <- seq.int(nrow(species_markers))
-  database_id <- 1
+  species_marker_id <- seq.int(nrow(species_markers))
 }) %>%
-  .[, c(8,1,7,6,5)] %>% # Remove obsolete and rearrange columns
+  .[, c(8,1,4,5,3)] %>% # Remove obsolete and rearrange columns
   .[complete.cases(.[ , 2]),] # Omit empty records (NAs)
 
-# Write data as csv to output folder
+## Write data as csv to output folder
 write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
                                         REPO_HOME),row.names=FALSE)
 ```
@@ -264,44 +276,30 @@ write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
 ### Load Tree
 
 To perform an analyses on our species we now load the backbone of the NSR. This is their
-complete tree, to be populated with our collected data where we seek out overlap / gaps
+complete tree, populated with our collected data. Here where we seek out overlap / gaps
 between Naturalis and our obtained Public Sequence Data .
 
-```{r visTree, include=FALSE}
-## Get classification for each species name
-## Subsequently, add coverage of BOLD records
-boldTree <- left_join(nsrSpecies, nsrBackbone[c(1:7)], by=c("species_name"="species")) %>%
+```{r tree, include=FALSE}
+## Get classification for each obtained record
+tree <- left_join(nsrSpecies, nsrBackbone[c(1:7)], by=c("species_name"="species")) %>%
   left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
   left_join(., markers, by=c("marker_id")) %>%
   left_join(., databases, by=c("database_id"))
 
-## Remove obsolete and rearrange columns
-boldTree <- boldTree[,c(4,5,6,7,8,9,2,12,13)]
-colnames(boldTree)[7] <- "species"
-
-## Add count for unique BOLD records
-boldTree <- boldTree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
+## Sum count of unique records
+tree <- tree %>% group_by_all() %>% summarise(.groups="keep", counts = n())
 
 ## Set count for non matching species to NA
-boldTree <- within(boldTree, {
-  f <- is.na(marker_name) == TRUE
+tree <- within(tree, {
+  f <- is.na(database_name) == TRUE
   counts[f] <- NA
   f <- NULL
 })
 
-## Create similar tree for Naturalis records
-natTree <- left_join(nsrBackbone[c(1:7)],
-                       natCoverage[c('species_name','counts','database_name','marker_name')],
-                       by=c("species"="species_name"))
-
-## Merge BOLD & Naturalis trees
-visTree <- unique(merge(boldTree, natTree,all=TRUE)) %>% drop_na(counts)
-
-## Add NSR's unmatched species to the combined tree
-visTree <- right_join(visTree, nsrBackbone[c(1:7)],
-                      by=c("kingdom","phylum","class","order","family","genus","species")) %>%
-  .[, c(1,2,3,4,5,6,7,10,9,8)]
+## Remove obsolete and rearrange columns
+tree <- tree[,c(4,5,6,7,8,9,2,12,13,14)]
+colnames(tree)[7] <- "species"
 
 ## Save workspace image
 save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
@@ -309,11 +307,14 @@ save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
 
 ### Perform visualisation
 
-Compute and draw reactive shiny filters through collapsible d3js tree
+Compute and draw reactive shiny filters through collapsible d3js tree. The server observes
+the d3 collapsible tree library and its real-time layout. Data transferred back to Shiny is
+mapped to a series of logical expressions to create the reactive filters. Additional figures
+aid the visualization of data.
 
 ```{r tree-visualisation}
 ## Define tree data ----
-m=visTree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
+m=tree%>%data.frame%>%mutate(NEWCOL=NA)%>%distinct
 
 ## Define UI for application ----
 ui <- fluidPage(
@@ -343,6 +344,7 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   # Tree Hierarchy ----
+  # Enable hierarchy order of the levels to be switched through its input box objects
   output$Hierarchy <- renderUI({
     Hierarchy=names(m)
     Hierarchy=head(Hierarchy,-1)
@@ -352,6 +354,7 @@ server <- function(input, output, session) {
   })
 
   # Observer ----
+  # The 'activeNode' observer returns meta data of the last clicked node
   network <- reactiveValues()
 
   observeEvent(input$d3_update,{
@@ -366,6 +369,10 @@ server <- function(input, output, session) {
     },caption='Last Clicked Node',caption.placement='top')
   })
 
+  # If a node is clicked it is interpreted as being of interest and a logical
+  # expression is created to return it and its children.
+  # If specific siblings are clicked, and opened, then the non-clicked siblings are not
+  # returned.
   TreeStruct=eventReactive(network$nodes,{
     df=m
     if(is.null(network$nodes)){
@@ -378,7 +385,8 @@ server <- function(input, output, session) {
     df
   })
 
-  # Render tree
+  # Render tree ----
+  # Meta data from the observer is inputed in the d3tree call in the activeReturn argument
   observeEvent(input$Hierarchy,{
     output$d3 <- renderD3tree({
       if(is.null(input$Hierarchy)){
@@ -401,7 +409,8 @@ server <- function(input, output, session) {
     })
   })
 
-  # Reactive table
+  # Reactive table ----
+  # Creates a filtered datatable, containing the selected nodes
   output$table <- DT::renderDataTable(expr = {
     TreeStruct()%>%select(-NEWCOL)
   },
@@ -409,6 +418,7 @@ server <- function(input, output, session) {
   )
 
   # Grahps ----
+  # Calculate coverage of each data set, based on the selected nodes
   output$billboarder <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
     nsrTotal <- unlist(lapply(dfActive[2:8], function(x) length(unique(x))))
@@ -433,7 +443,7 @@ server <- function(input, output, session) {
       comb_total = combCov
     )
 
-    # Barchart Taxa
+    # Plot barchart for taxon coverage
     billboarder() %>%
       bb_barchart(
         data = vis.cov[, c("taxa", "bold_total", "nat_total", "comb_total")]
@@ -448,7 +458,7 @@ server <- function(input, output, session) {
       bb_labs(title = "Coverage of taxa")
   })
 
-  # Marker Pie Chart
+  # Plot pie chart for share of markers
   output$markerPie <- renderBillboarder(expr = {
     dfActive <- TreeStruct()%>%select(-NEWCOL)
     vis.marker <- setNames(aggregate(dfActive$counts, list(dfActive$marker_name),
