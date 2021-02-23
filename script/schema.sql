@@ -7,9 +7,24 @@ CREATE TABLE "nsr_species" (
 	PRIMARY KEY("species_id")
 );
 
+CREATE TABLE "tree_nsr" (
+  "tax_id" TEXT NOT NULL,
+  "species_id" INTEGER NOT NULL,
+  "kingdom" TEXT NOT NULL,
+  "phylum" TEXT NOT NULL,
+  "class" TEXT NOT NULL,
+  "order" TEXT NOT NULL,
+  "family" TEXT NOT NULL,
+  "genus" TEXT NOT NULL,
+  "species" TEXT NOT NULL,
+  "identification_reference" TEXT NOT NULL,
+  PRIMARY KEY ("tax_id"),
+  FOREIGN KEY ("species_id") REFERENCES "nsr_species"("species_id")
+);
+
 CREATE TABLE "tree_ncbi" (
-	"tax_id"	INTEGER NOT NULL,
-	"species_id"	INTEGER NOT NULL,
+	"tax_id" INTEGER NOT NULL,
+	"species_id" INTEGER NOT NULL,
 	"parent_tax_id"	INTEGER,
 	"rank"	TEXT NOT NULL,
 	"name"	TEXT NOT NULL,

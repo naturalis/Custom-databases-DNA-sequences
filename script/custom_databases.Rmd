@@ -103,6 +103,7 @@ for(x in 1:length(nsrIn)){
 nsrBackbone = data.frame()
 for(x in 1:nrow(nsrSpecimens)){
   tryCatch({
+    c.id=nsrSpecimens$id[x]
     c.kingdom=nsrSpecimens$defaultClassification$kingdom[x]
     c.phylum=nsrSpecimens$defaultClassification$phylum[x]
     c.class=nsrSpecimens$defaultClassification$className[x]
@@ -112,15 +113,23 @@ for(x in 1:nrow(nsrSpecimens)){
     c.species=nsrSpecimens$acceptedName$specificEpithet[x]
     c.authority=nsrSpecimens$acceptedName$authorshipVerbatim[x]
 
-    row <- data.frame(cbind(kingdom=c.kingdom,phylum=c.phylum,class=c.class,order=c.order,
-                            family=c.family,genus=c.genus,species=paste(c.genus,c.species),
-                            identification_reference=c.authority))
+    row <- data.frame(cbind(tax_id=c.id,kingdom=c.kingdom,phylum=c.phylum,class=c.class,
+                        order=c.order,family=c.family,genus=c.genus,
+                        species=paste(c.genus,c.species),identification_reference=c.authority))
     nsrBackbone <- bind_rows(nsrBackbone, row)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
 ## Remove parenthesis around the authority for consistency across data sets
 nsrBackbone$identification_reference = gsub("[()]", "", nsrBackbone$identification_reference)
+
+## Match to species ID
+nsrBackbone <- left_join(nsrBackbone, nsrSpecies[1:2], by=c("species"="species_name")) %>%
+  .[,c(1,10,2,3,4,5,6,7,8,9)]
+
+## Write NSR data to file
+write.csv(nsrBackbone, file=sprintf('%s/results/tree_nsr.csv', REPO_HOME),
+          row.names=FALSE)
 
 ## Clean up query variables
 rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
@@ -185,7 +194,7 @@ rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
 The ability to divert to another taxonomy could prove useful in certain situations.
 Classification of species will hence be extrated from a database of choice for later use.
 
-```{r ncbi_tree, include=FALSE}
+```{r tree_ncbi, include=FALSE}
 ## Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
 ## Used data source: NCBI
 db_download_ncbi()
@@ -220,14 +229,14 @@ taxdata <- unique(taxdata)
 
 ## Match hierarchies to NSR species names by taxon IDs
 ## (Accounting for use of synonymous names within NCBI)
-ncbi_tree <- left_join(taxdata, taxidOut, by=c("tax_id"="id"),
+tree_ncbi <- left_join(taxdata, taxidOut, by=c("tax_id"="id"),
                        suffix=c("","_nsr")) %>%
   left_join(., nsrSpecies[1:2], by=c("name_nsr" = "species_name")) %>%
   .[, c(1,6,2,3,4)] # Reaarange columns, drop 'name_nsr' column
-ncbi_tree <- ncbi_tree[complete.cases(ncbi_tree$species_id), ]
+tree_ncbi <- tree_ncbi[complete.cases(tree_ncbi$species_id), ]
 
 ## Write NCBI data to file
-write.csv(ncbi_tree, file=sprintf('%s/results/tree_ncbi.csv', REPO_HOME),
+write.csv(tree_ncbi, file=sprintf('%s/results/tree_ncbi.csv', REPO_HOME),
           row.names=FALSE)
 
 ## Clean up query variables
@@ -281,7 +290,7 @@ between Naturalis and our obtained Public Sequence Data .
 
 ```{r tree, include=FALSE}
 ## Get classification for each obtained record
-tree <- left_join(nsrSpecies, nsrBackbone[c(1:7)], by=c("species_name"="species")) %>%
+tree <- left_join(nsrSpecies[1], nsrBackbone[c(2:9)], by=c("species_id")) %>%
   left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
   left_join(., markers, by=c("marker_id")) %>%
@@ -298,8 +307,7 @@ tree <- within(tree, {
 })
 
 ## Remove obsolete and rearrange columns
-tree <- tree[,c(4,5,6,7,8,9,2,12,13,14)]
-colnames(tree)[7] <- "species"
+tree <- tree[,c(2,3,4,5,6,7,8,11,12,13)]
 
 ## Save workspace image
 save.image(sprintf('%s/script/workspace.RData', REPO_HOME))
