@@ -55,32 +55,26 @@ zip_path = args.outdir1+"/BOLD_export.zip"
 
 def nsrTaxonomy():
     """
-    Loads a NSR Taxonomy CSV file into a Pandas Dataframe. Non-ascii
-    characters for each column (primairly identification references)
-    will be decoded. Binomial Nomenclature and Authority for each
-    species-level record is extracted via regex and saved to a list.
-    Brackets are removed from the references for the sake of consistency.
+    Loads a NSR Taxonomy CSV file into a Pandas Dataframe. Binomial
+    Nomenclature and Authority for each species-level record is
+    extracted via regex and saved to a list. Brackets are removed
+    from the references for the sake of consistency.
     Arguments:
         taxonomyFile: CSV file read as Pandas Dataframe
-        df_Taxonomy: Dataframe with capture group, on species-level records
+        taxonomyDf: Dataframe with capture group, on species-level records
     Return:
         taxonomyList: List of all extracted taxonomy (Species + Authority)
     """
     # Input file
-    taxonomyFile = pd.read_csv(args.indir+"/"+args.infile1, header=2, sep="\t")
-
-    # Decode non-ascii characters
-    for column in taxonomyFile:
-        taxonomyFile[column] = taxonomyFile[column].astype(str).apply(
-            lambda x: unicodedata.normalize('NFKD', x).encode(
-                'ascii', 'ignore').decode("utf-8"))
+    taxonomyFile = pd.read_csv(args.indir+"/"+args.infile1, header=2,
+                               sep="\t", encoding="utf8")
 
     # Extract Binomial Nomenclature and Authority for species-level records
-    df_Taxonomy = taxonomyFile.loc[taxonomyFile['rank'] == 'soort']
-    df_Taxonomy['scientific'] = df_Taxonomy['scientific_name'].str.extract(
+    taxonomyDf = taxonomyFile.loc[taxonomyFile['rank'] == 'soort']
+    taxonomyDf['scientific'] = taxonomyDf['scientific_name'].str.extract(
         r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
-    df_Taxonomy = df_Taxonomy.dropna()
-    taxonomyList = list(dict.fromkeys(df_Taxonomy['scientific']))
+    taxonomyDf = taxonomyDf.dropna(subset=["scientific"])
+    taxonomyList = list(dict.fromkeys(taxonomyDf['scientific']))
     taxonomyList = [re.sub(r"[()]", "", taxon) for taxon in taxonomyList]
 
     return taxonomyList
@@ -88,15 +82,14 @@ def nsrTaxonomy():
 
 def nsrSynonyms(species):
     """
-    Loads a NSR Synonyms CSV file into a Pandas Dataframe. Non-ascii
-    characters for each column (primairly identification references)
-    will be decoded. Synonyms of scientific notation are extracted
-    via regex for each known taxonomy, and saved to a list. Brackets
-    are removed from the references for the sake of consistency. Taxon
-    and respective synonym are subsequently paired in a dictionary.
+    Loads a NSR Synonyms CSV file into a Pandas Dataframe. Synonyms
+    of scientific notation are extracted via regex for each known
+    taxonomy, and saved to a list. Brackets are removed from the
+    references for the sake of consistency. Taxon and respective
+    synonym are subsequently paired in a dictionary.
     Arguments:
         synonymsFile: CSV file read as Pandas Dataframe
-        df_Synonyms: Dataframe containing only scientific synonyms
+        synonymsDf: Dataframe containing only scientific synonyms
         synonymsMatch: Dataframe with capture group, on known taxonomy
         synonymsIndex: List of indexes of each extracted synonym
         synonymsRows: Dataframe reuniting synonym with respective taxon
@@ -104,35 +97,28 @@ def nsrSynonyms(species):
         synonymsList: List of all extracted synonyms (Species + Authority)
         synonymsDict: Dictionary pairing synonym with taxon notation
     """
-
     # Input file
-    synonymsFile = pd.read_csv(args.indir+"/"+args.infile2, header=2, sep="\t")
-
-    # Decode special characters
-    for column in synonymsFile:
-        synonymsFile[column] = synonymsFile[column].astype(str).apply(
-            lambda x: unicodedata.normalize('NFKD', x).encode(
-                'ascii', 'ignore').decode("utf-8"))
+    synonymsFile = pd.read_csv(args.indir+"/"+args.infile2, header=2,
+                               sep="\t", encoding="utf8")
 
     # Extract synonyms
-    df_Synonyms = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
-    #synonymsMatch = df_Synonyms[df_Synonyms['taxon'].isin(species)]
-    df_Synonyms['species'] = df_Synonyms['synonym'].str.extract(
+    synonymsDf = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
+    synonymsDf['species'] = synonymsDf['synonym'].str.extract(
         r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
-    synonymsMatch = df_Synonyms.dropna()
+    synonymsMatch = synonymsDf.dropna(subset=["species"])
     synonymsList = list(dict.fromkeys(synonymsMatch['species']))
     synonymsList = [re.sub(r"[()]", "", synonym) for synonym in synonymsList]
 
     # Pair synonyms with respective taxon
     synonymsIndex = synonymsMatch['species'].index.values.tolist()
-    synonymsRows = df_Synonyms.loc[synonymsIndex, :]
+    synonymsRows = synonymsDf.loc[synonymsIndex, :]
     synonymsRows['taxonFiltered'] = synonymsRows['taxon'].str.extract(
         r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
-    synonymsRows = synonymsRows.dropna()
+    synonymsRows = synonymsRows.dropna(subset=["taxonFiltered"])
     synonymsDict = synonymsRows.set_index('synonym')['taxonFiltered'].to_dict()
-   
+
     # Write dictionary to file
-    with open(args.indir+"/synonyms_extract.csv", "w") as f:
+    with open(args.indir+"/synonyms_extract.csv", "w", encoding="utf-8") as f:
         f.write("Synonym,Taxon\n")
         for key, value in synonymsDict.items():
             f.write('"%s","%s"' % (key, value))
@@ -153,23 +139,19 @@ def nsrOutput(species, synonyms):
     Return:
         genera: List containing all unique genera
     """
-    # Write species to file
+    # Write species names to file
     index = 0
-    with open(par_path+"/results/nsr_species.csv", "w") as f:
+    with open(par_path+"/results/nsr_species.csv", "w", encoding="utf-8") as f:
         f.write('"species_id","species_name","identification_reference"\n')
         for i in species:
             name = ' '.join(str(i).split()[:2])
             identification = ' '.join(str(i).split()[2:])
             f.write('%s,%s,"%s"\n' % (index, name, identification))
-            index += 1  
+            index += 1
 
-    # Combine species with their known synonyms
+    # Extract distinctive genera from species and synonyms
     combined = sorted(species + synonyms)
-
-    # Select genera of each species and known synonym
     genera = [i.split()[0] for i in combined]
-
-    # Drop duplicates from list
     genera = list(dict.fromkeys(genera))
 
     return genera
@@ -250,11 +232,8 @@ def bold_nsr(species, synonyms, syn_dict, zip_path):
                         for line in tsvreader:
                             # Filter on Geographical site
                             if (line['country'] == "Netherlands"):
-                                # Decode special characters
                                 bold_identification = re.sub('[()]', '', line['identification_reference'])
                                 bold_name = line['species_name'] + " " + bold_identification
-                                bold_name = bold_name.encode('raw_unicode_escape').decode("utf-8")
-                                bold_name = unicodedata.normalize('NFKD', bold_name).encode('ascii', 'ignore').decode("utf-8")
                                 # Compare BOLD with NSR species names
                                 if (bold_name in species):
                                     bold_output(args.outfile1, line)
@@ -286,14 +265,14 @@ def bold_output(file, line):
     global output_header
     if output_header is False:
         for temp in (args.outfile1, args.outfile2):
-            with open(args.outdir2+"/"+temp, "a") as f:
+            with io.open(args.outdir2+"/"+temp, mode="a", encoding="utf-8") as f:
                 for key, value in line.items():
                     f.write('%s\t' % (key))
                 f.write("\n")
         output_header = True
 
     # Write sequence data, for each record
-    with open(args.outdir2+"/"+file, "a") as f:
+    with io.open(args.outdir2+"/"+file, mode="a", encoding="utf-8") as f:
         for key, value in line.items():
             f.write('%s\t' % (value))
         f.write("\n")
