@@ -8,18 +8,18 @@ CREATE TABLE "nsr_species" (
 );
 
 CREATE TABLE "tree_nsr" (
-  "tax_id" TEXT NOT NULL,
-  "species_id" INTEGER NOT NULL,
-  "kingdom" TEXT NOT NULL,
-  "phylum" TEXT NOT NULL,
-  "class" TEXT NOT NULL,
-  "order" TEXT NOT NULL,
-  "family" TEXT NOT NULL,
-  "genus" TEXT NOT NULL,
-  "species" TEXT NOT NULL,
-  "identification_reference" TEXT NOT NULL,
-  PRIMARY KEY ("tax_id"),
-  FOREIGN KEY ("species_id") REFERENCES "nsr_species"("species_id")
+	"tax_id" TEXT NOT NULL,
+	"species_id" INTEGER NOT NULL,
+	"kingdom" TEXT NOT NULL,
+	"phylum" TEXT NOT NULL,
+	"class" TEXT NOT NULL,
+	"order" TEXT NOT NULL,
+	"family" TEXT NOT NULL,
+	"genus" TEXT NOT NULL,
+	"species" TEXT NOT NULL,
+	"identification_reference" TEXT NOT NULL,
+	PRIMARY KEY ("tax_id"),
+	FOREIGN KEY ("species_id") REFERENCES "nsr_species"("species_id")
 );
 
 CREATE TABLE "tree_ncbi" (
@@ -37,7 +37,7 @@ CREATE TABLE "species_markers" (
 	"species_id" INTEGER NOT NULL,
 	"database_id" INTEGER NOT NULL,
 	"marker_id" INTEGER NOT NULL,
-	"sequence_id" INTEGER NOT NULL,
+	"sequence_id" TEXT NOT NULL,
 	PRIMARY KEY("species_marker_id"),
 	FOREIGN KEY("database_id") REFERENCES "databases"("database_id"),
 	FOREIGN KEY("marker_id") REFERENCES "markers"("marker_id"),

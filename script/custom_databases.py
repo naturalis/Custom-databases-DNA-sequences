@@ -72,7 +72,7 @@ def nsrTaxonomy():
     # Extract Binomial Nomenclature and Authority for species-level records
     taxonomyDf = taxonomyFile.loc[taxonomyFile['rank'] == 'soort']
     taxonomyDf['scientific'] = taxonomyDf['scientific_name'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
+        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
     taxonomyDf = taxonomyDf.dropna(subset=["scientific"])
     taxonomyList = list(dict.fromkeys(taxonomyDf['scientific']))
     taxonomyList = [re.sub(r"[()]", "", taxon) for taxon in taxonomyList]
@@ -104,7 +104,7 @@ def nsrSynonyms(species):
     # Extract synonyms
     synonymsDf = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
     synonymsDf['species'] = synonymsDf['synonym'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
+        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
     synonymsMatch = synonymsDf.dropna(subset=["species"])
     synonymsList = list(dict.fromkeys(synonymsMatch['species']))
     synonymsList = [re.sub(r"[()]", "", synonym) for synonym in synonymsList]
@@ -113,12 +113,12 @@ def nsrSynonyms(species):
     synonymsIndex = synonymsMatch['species'].index.values.tolist()
     synonymsRows = synonymsDf.loc[synonymsIndex, :]
     synonymsRows['taxonFiltered'] = synonymsRows['taxon'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]*\b\s\(?\b[A-Z][a-z]*\b.*,\s\d{4}\)?)')
+        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
     synonymsRows = synonymsRows.dropna(subset=["taxonFiltered"])
     synonymsDict = synonymsRows.set_index('synonym')['taxonFiltered'].to_dict()
 
     # Write dictionary to file
-    with open(args.indir+"/synonyms_extract.csv", "w", encoding="utf-8") as f:
+    with io.open(args.indir+"/synonyms_extract.csv", "w", encoding="utf-8") as f:
         f.write("Synonym,Taxon\n")
         for key, value in synonymsDict.items():
             f.write('"%s","%s"' % (key, value))
@@ -141,7 +141,7 @@ def nsrOutput(species, synonyms):
     """
     # Write species names to file
     index = 0
-    with open(par_path+"/results/nsr_species.csv", "w", encoding="utf-8") as f:
+    with io.open(par_path+"/results/nsr_species.csv", "w", encoding="utf-8") as f:
         f.write('"species_id","species_name","identification_reference"\n')
         for i in species:
             name = ' '.join(str(i).split()[:2])

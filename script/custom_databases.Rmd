@@ -1,7 +1,7 @@
 ---
 title: "Custom Databases: Classification & Analyses"
 author: "Bastiaan"
-date: "23 February 2021"
+date: "25 February 2021"
 output: html_document
 runtime: shiny
 ---
@@ -61,16 +61,16 @@ output from the [script](../script/custom_databases.py)
 ```{r datasets, include=FALSE}
 ## Load species and synonyms from the NSR files
 nsrSpecies.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
-nsrSpecies <- read.csv(nsrSpecies.file)
+nsrSpecies <- read.csv(nsrSpecies.file, encoding="UTF-8")
 
 nsrSynonyms.file <- sprintf('%s/data/NSR_exports/synonyms_extract.csv', REPO_HOME)
-nsrSynonyms <- read.csv(nsrSynonyms.file)
+nsrSynonyms <- read.csv(nsrSynonyms.file, encoding="UTF-8")
 
 ## Load public sequence data
 ## (Set missing values to na)
 bold.file <- sprintf('%s/data/FASTA_files/match.tsv', REPO_HOME)
 bold <- read.csv(bold.file, header=TRUE, sep="\t", row.names=NULL,
-                 na.strings=c(""," ","NA"))
+                 na.strings=c(""," ","NA"), encoding="UTF-8")
 
 ## Load marker data set
 markers.file <- sprintf('%s/results/markers.csv', REPO_HOME)
@@ -129,7 +129,7 @@ nsrBackbone <- left_join(nsrBackbone, nsrSpecies[1:2], by=c("species"="species_n
 
 ## Write NSR data to file
 write.csv(nsrBackbone, file=sprintf('%s/results/tree_nsr.csv', REPO_HOME),
-          row.names=FALSE)
+          row.names=FALSE, fileEncoding="utf-8")
 
 ## Clean up query variables
 rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
@@ -168,9 +168,9 @@ for(x in 1:nrow(natSpecimens)){
 }
 
 ## Remove NAs, sum unique species record counts
-natSpecies <- natSpecies[complete.cases(natSpecies), ]
-natSpecies$counts <- as.numeric(as.character(natSpecies$count))
-natSpecies <- aggregate(counts ~ species+sequenceID, data=natSpecies, FUN=sum)
+natSpecies <- aggregate(natSpecies$counts, by=list(natSpecies$species,natSpecies$sequenceID),sum)
+colnames(natSpecies) <- c("species", "sequenceID", "counts")
+natSpecies$counts[is.na(natSpecies$counts)] <- 0
 
 ## Prepare to account for synonymous names
 nsrSynonyms$species <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Synonym)
@@ -237,7 +237,7 @@ tree_ncbi <- tree_ncbi[complete.cases(tree_ncbi$species_id), ]
 
 ## Write NCBI data to file
 write.csv(tree_ncbi, file=sprintf('%s/results/tree_ncbi.csv', REPO_HOME),
-          row.names=FALSE)
+          row.names=FALSE, fileEncoding="utf-8")
 
 ## Clean up query variables
 rm(x, row, list = ls()[grep("^c.", ls())])
@@ -275,11 +275,11 @@ species_markers <- within(species_markers, {
   species_marker_id <- seq.int(nrow(species_markers))
 }) %>%
   .[, c(8,1,4,5,3)] %>% # Remove obsolete and rearrange columns
-  .[complete.cases(.[ , 2]),] # Omit empty records (NAs)
+  .[complete.cases(.[ , 2]),] # Omit empty species_id's (NAs)
 
 ## Write data as csv to output folder
-write.csv(species_markers, file=sprintf('%s/results/species_markers.csv',
-                                        REPO_HOME),row.names=FALSE)
+write.csv(species_markers, file=sprintf('%s/results/species_markers.csv', REPO_HOME),
+          row.names=FALSE, fileEncoding="utf-8")
 ```
 
 ### Load Tree
