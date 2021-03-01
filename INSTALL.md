@@ -16,6 +16,7 @@ The following libraries are used:
   * Pandas 1.0.5
   * re 2.2.1
   * urllib3 1.25.9
+  * taxonparser 0.2.3
 
 ## Part 2: Data classification & analyses
 
