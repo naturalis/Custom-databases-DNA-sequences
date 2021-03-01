@@ -14,6 +14,9 @@
 # ====================================================================
 
 # Import packages
+from taxon_parser import TaxonParser, UnparsableNameException
+from zipfile import ZipFile
+from os.path import basename
 import urllib3
 import csv
 import os
@@ -23,8 +26,6 @@ import unicodedata
 import re
 import zipfile
 import io
-from zipfile import ZipFile
-from os.path import basename
 
 # Set global variables
 http = urllib3.PoolManager()
@@ -54,114 +55,155 @@ zip_path = args.outdir1+"/BOLD_export.zip"
 
 
 def nsrTaxonomy():
-    """
-    Loads a NSR Taxonomy CSV file into a Pandas Dataframe. Binomial
-    Nomenclature and Authority for each species-level record is
-    extracted via regex and saved to a list. Brackets are removed
-    from the references for the sake of consistency.
+    """ Captures and writes all binomial taxonomy to a CSV file.
+
+    Loads a NSR Taxonomy export CSV file into a Pandas Dataframe, utf-8
+    encoded. All taxonomic names for species-level records are sent to
+    taxonParser() to parse them into their elementary components.
+    Indexes and writes returned species to a CSV file.
+
     Arguments:
-        taxonomyFile: CSV file read as Pandas Dataframe
-        taxonomyDf: Dataframe with capture group, on species-level records
+        taxonomyFile: NSR Taxonomy export read as Pandas Dataframe
+        taxonomy: Dataframe with capture group on species-level records
+        taxonList: List item containing parsed taxonomic components
+        parser: Object containing the name parts and original taxon
+        index: Numerical counter
+        binomial: Binomial nomenclature of taxon
+        authorship: Authorship of taxon
     Return:
-        taxonomyList: List of all extracted taxonomy (Species + Authority)
+        taxonList: List of all extracted taxonomy (Species + Authority)
     """
     # Input file
     taxonomyFile = pd.read_csv(args.indir+"/"+args.infile1, header=2,
                                sep="\t", encoding="utf8")
 
-    # Extract Binomial Nomenclature and Authority for species-level records
-    taxonomyDf = taxonomyFile.loc[taxonomyFile['rank'] == 'soort']
-    taxonomyDf['scientific'] = taxonomyDf['scientific_name'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
-    taxonomyDf = taxonomyDf.dropna(subset=["scientific"])
-    taxonomyList = list(dict.fromkeys(taxonomyDf['scientific']))
-    taxonomyList = [re.sub(r"[()]", "", taxon) for taxon in taxonomyList]
+    # Parse taxonomic names into their elementary components
+    taxonomy = taxonomyFile.loc[taxonomyFile['rank'] == 'soort']
+    taxonList = []
+    for taxon in taxonomy['scientific_name']:
+        parser = taxonParser(taxon)
+        if not parser or parser is False:
+            pass
+        else:
+            taxonList.append(parser)
 
-    return taxonomyList
+    # Write taxonomy to file
+    index = 0
+    with io.open(par_path+"/results/nsr_species.csv", "w", encoding="utf-8") as outfile:
+        outfile.write('"species_id","species_name","identification_reference"\n')
+        for i in taxonList:
+            binomial = ' '.join(str(i).split()[:2])
+            authorship = ' '.join(str(i).split()[2:])
+            outfile.write('%s,%s,"%s"\n' % (index, binomial, authorship))
+            index += 1
+
+    return taxonList
 
 
-def nsrSynonyms(species):
-    """
-    Loads a NSR Synonyms CSV file into a Pandas Dataframe. Synonyms
-    of scientific notation are extracted via regex for each known
-    taxonomy, and saved to a list. Brackets are removed from the
-    references for the sake of consistency. Taxon and respective
-    synonym are subsequently paired in a dictionary.
+def nsrSynonyms():
+    """ Captures and writes all binomial synonyms to a CSV file.
+
+    Loads a NSR Synonyms export CSV file into a Pandas Dataframe, utf-8
+    encoded. All synonyms with respective taxons of scientific notation
+    are sent to taxonParser() to parse them into their elementary
+    components. Returned synonyms and taxons are paired in a dictionary,
+    and written to a CSV file.
+
     Arguments:
-        synonymsFile: CSV file read as Pandas Dataframe
-        synonymsDf: Dataframe containing only scientific synonyms
-        synonymsMatch: Dataframe with capture group, on known taxonomy
-        synonymsIndex: List of indexes of each extracted synonym
-        synonymsRows: Dataframe reuniting synonym with respective taxon
+        synonymsFile: NSR Synonyms export read as Pandas Dataframe
+        synonyms: Dataframe with capture group on scientific notations
+        synonymDict: Dictionary containing parsed taxonomic components
+        synonym: Object containing the name parts and original synonym
+        taxon: Object containing the name parts and original taxon
     Return:
-        synonymsList: List of all extracted synonyms (Species + Authority)
-        synonymsDict: Dictionary pairing synonym with taxon notation
+        synonymList: List of all synonyms (binomial name + authority)
+        synonymDict: Dictionary pairing synonym with respective taxon
     """
     # Input file
     synonymsFile = pd.read_csv(args.indir+"/"+args.infile2, header=2,
                                sep="\t", encoding="utf8")
 
-    # Extract synonyms
-    synonymsDf = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
-    synonymsDf['species'] = synonymsDf['synonym'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
-    synonymsMatch = synonymsDf.dropna(subset=["species"])
-    synonymsList = list(dict.fromkeys(synonymsMatch['species']))
-    synonymsList = [re.sub(r"[()]", "", synonym) for synonym in synonymsList]
-
-    # Pair synonyms with respective taxon
-    synonymsIndex = synonymsMatch['species'].index.values.tolist()
-    synonymsRows = synonymsDf.loc[synonymsIndex, :]
-    synonymsRows['taxonFiltered'] = synonymsRows['taxon'].str.extract(
-        r'(\b[A-Z][a-z]*\b\s\b[a-z]\-?[\w+]*\b\s\(?\b[\w+]*\b.*,?\s?\d{4}\)?)')
-    synonymsRows = synonymsRows.dropna(subset=["taxonFiltered"])
-    synonymsDict = synonymsRows.set_index('synonym')['taxonFiltered'].to_dict()
+    # Parse taxonomic names into their elementary components
+    synonyms = synonymsFile.loc[synonymsFile['language'] == 'Scientific']
+    synonymDict = {}
+    for synonym, taxon in zip(synonyms['synonym'], synonyms['taxon']):
+        synonym = taxonParser(synonym)
+        taxon = taxonParser(taxon)
+        if not taxon or synonym is False or taxon is False:
+            pass
+        else:
+            synonymDict[synonym] = taxon
 
     # Write dictionary to file
-    with io.open(args.indir+"/synonyms_extract.csv", "w", encoding="utf-8") as f:
-        f.write("Synonym,Taxon\n")
-        for key, value in synonymsDict.items():
-            f.write('"%s","%s"' % (key, value))
-            f.write("\n")
+    with io.open(par_path+"/results/nsr_synonyms.csv", "w", encoding="utf-8") as outfile:
+        outfile.write("synonym_name,taxon\n")
+        for key, value in synonymDict.items():
+            outfile.write('"%s","%s"' % (key, value))
+            outfile.write("\n")
 
-    return synonymsList, synonymsDict
+    return [*synonymDict], synonymDict
 
 
-def nsrOutput(species, synonyms):
-    """
-    Stores all unique species, index, as a csv file. Combines the
-    scientific names of obtained taxonomy and synonyms to one list.
-    Selects all unique genera to be used in the BOLD pipeline.
+def nsrGenera(taxonList, synonymList):
+    """ Extracts the unique genera from both taxonomy and synonym lists.
+
+    Combines the scientific names of obtained taxonomy and synonyms to
+    one list, filtering out empty lines. Selects all unique genera.
+
     Arguments:
-        name: Binomial nomenclature of species
-        identification: Identification reference of species
-        combined: Scientific notation of all species and known synonyms
+        species: Scientific notation of all species and known synonyms
     Return:
-        genera: List containing all unique genera
+        generaList: List of all unique genera
     """
-    # Write species names to file
-    index = 0
-    with io.open(par_path+"/results/nsr_species.csv", "w", encoding="utf-8") as f:
-        f.write('"species_id","species_name","identification_reference"\n')
-        for i in species:
-            name = ' '.join(str(i).split()[:2])
-            identification = ' '.join(str(i).split()[2:])
-            f.write('%s,%s,"%s"\n' % (index, name, identification))
-            index += 1
+    species = list(filter(None, sorted(taxonList + synonymList)))
+    generaList = [i.split()[0] for i in species]
+    generaList = list(dict.fromkeys(generaList))
+    return generaList
 
-    # Extract distinctive genera from species and synonyms
-    combined = sorted(species + synonyms)
-    genera = [i.split()[0] for i in combined]
-    genera = list(dict.fromkeys(genera))
 
-    return genera
+def taxonParser(taxon):
+    """ Parse any taxonomic name into its elementary components.
+
+    Used library is a pure Python adaptation of the GBIF Java
+    name-parser library. Taxonomic names are parsed into their
+    elementary components. Genus, specific epithet, and authors are
+    concatenated for all binomial names and returned. For any name
+    that can not be parsed, an UnparsableNameException is thrown.
+
+    Arguments:
+        parser: Object to parse
+        parsed_name: Object containing the name parts and original taxon
+    Return:
+        scientific_name: Concatenation of binomial name and authorship
+    """
+    parser = TaxonParser(taxon)
+    scientific_name = ""
+
+    try:
+        parsed_name = parser.parse()
+        if parsed_name.isBinomial() is True:
+            scientific_name = str(parsed_name.genus) + " " + str(parsed_name.specificEpithet)
+            if str(parsed_name.combinationAuthorship) != "<unknown>":
+                scientific_name += " " + str(parsed_name.combinationAuthorship)
+            elif str(parsed_name.basionymAuthorship) != "<unknown>":
+                scientific_name += " " + str(parsed_name.basionymAuthorship)
+            else:
+                scientific_name = False
+        else:
+            pass
+    except UnparsableNameException:
+        pass
+
+    return scientific_name
 
 
 def bold_extract(genera):
-    """
-    Downloads all collected genera using BOLD's Public Data Portal API.
-    Base URL for data retrieval is appended to each genus from the NSR list.
-    Genera are retrieved one genus at a time and saved to the allocated folder.
+    """ Obtains public sequence data for a list of genera.
+
+    Downloads records using BOLD's Public Data Portal API. Base URL for
+    data retrieval is appended to each genus from the NSR genera list.
+    Genera are retrieved one genus at a time and saved as TSV file.
+
     Arguments:
         base_url: String, default URL for data retrieval using BOLD's API
         source_urls: List of all URL's to be retrieved
@@ -188,9 +230,7 @@ def bold_extract(genera):
 
 
 def zip_directory(folder_path, zip_path):
-    """
-    Compresses all BOLD Sequence Data output files into a zip file format.
-    """
+    """ Compresses all BOLD output files into a zip file format. """
     # Create a ZipFile object
     with ZipFile(zip_path, mode='w') as zipObj:
         # Iterate over all the files in directory
@@ -205,11 +245,13 @@ def zip_directory(folder_path, zip_path):
 
 
 def bold_nsr(species, synonyms, syn_dict, zip_path):
-    """
-    Iterating over every downloaded file from BOLD, sequence data is compared
-    against species from the NSR. Subgenera will be filtered out creating a
-    file with as many accepeted names as possible. Mismatches against the NSR
-    are copied to a seperate list.
+    """ Match obtained sequence records to the reference species names.
+
+    Iterates over every output file from BOLD and compares sequence data
+    to the list of species from the NSR. Subgenera will be filtered out
+    creating a file with as many accepeted names as possible. Mismatches
+    against the NSR are copied to a seperate list.
+
     Arguments:
         file: String, current filename (genus) from the BOLD downloads
         filename: String, decoding the filename from the filesystem encoding
@@ -232,7 +274,7 @@ def bold_nsr(species, synonyms, syn_dict, zip_path):
                         for line in tsvreader:
                             # Filter on Geographical site
                             if (line['country'] == "Netherlands"):
-                                bold_identification = re.sub('[()]', '', line['identification_reference'])
+                                bold_identification = re.sub('[()]', '', str(line['identification_reference']))
                                 bold_name = line['species_name'] + " " + bold_identification
                                 # Compare BOLD with NSR species names
                                 if (bold_name in species):
@@ -254,9 +296,11 @@ def bold_nsr(species, synonyms, syn_dict, zip_path):
 
 
 def bold_output(file, line):
-    """
-    Opens respective output file and appends the record. Ensures all
-    emitted records contain sequence data.
+    """ Writes matching/non-matching records to respesctive file.
+
+    Opens respective output file and appends the record. Ensures each
+    file contains a header row.
+
     Arguments:
         output_header: List of record fields to be emitted
         f: Outputfile, either match or mismatch depending on parameter
@@ -279,19 +323,17 @@ def bold_output(file, line):
 
 
 def main():
-    """
-    Main logic. Powers each function with their respective input.
-    """
+    """ Main logic. Powers each function with their respective input. """
     # Create clean output files
     open(args.outdir2+"/"+args.outfile1, 'w').close()
     open(args.outdir2+"/"+args.outfile2, 'w').close()
 
     # Run functions
-    taxonomyList = nsrTaxonomy()
-    synonymsList, synonymsDict = nsrSynonyms(taxonomyList)
-    generaList = nsrOutput(taxonomyList, synonymsList)
+    taxonList = nsrTaxonomy()
+    synonymList, synonymDict = nsrSynonyms()
+    generaList = nsrGenera(taxonList, synonymList)
     bold_extract(generaList)
     zip_directory(args.outdir1, zip_path)
-    bold_nsr(taxonomyList, synonymsList, synonymsDict, zip_path)
+    bold_nsr(taxonList, synonymList, synonymDict, zip_path)
     print("Done")
 main()
