@@ -29,6 +29,7 @@ library(shiny)
 library(DT)
 library(plyr)
 library(dplyr)
+library(stringr)
 library(d3Tree)
 library(billboarder)
 library(nbaR)
@@ -63,7 +64,7 @@ output from the [script](../script/custom_databases.py)
 nsrSpecies.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
 nsrSpecies <- read.csv(nsrSpecies.file, encoding="UTF-8")
 
-nsrSynonyms.file <- sprintf('%s/data/NSR_exports/synonyms_extract.csv', REPO_HOME)
+nsrSynonyms.file <- sprintf('%s/results/nsr_synonyms.csv', REPO_HOME)
 nsrSynonyms <- read.csv(nsrSynonyms.file, encoding="UTF-8")
 
 ## Load public sequence data
@@ -79,6 +80,23 @@ markers <- read.csv(markers.file, header=TRUE, sep=",")
 ## Load database data set
 databases.file <- sprintf('%s/results/databases.csv', REPO_HOME)
 databases <- read.csv(databases.file, header=TRUE, sep=",")
+```
+
+### NSR Synonyms
+
+Match NSR Synonyms to species
+
+```{r nsrSynonyms, include=FALSE}
+nsrSynonyms <- inner_join(nsrSynonyms, nsrSpecies, by=c("taxon_name"="species_name",
+                                                       "taxon_author"="identification_reference"))
+nsrSynonyms <- within(nsrSynonyms, {
+  synonym_id <- seq.int(nrow(nsrSynonyms))
+}) %>% .[,c(6,5,1,2)]
+
+## Update CSV file
+write.csv(nsrSynonyms, file=sprintf('%s/results/nsr_synonyms.csv', REPO_HOME),
+          row.names=FALSE, fileEncoding="utf-8")
+
 ```
 
 ### NSR Backbone
@@ -168,19 +186,16 @@ for(x in 1:nrow(natSpecimens)){
 }
 
 ## Remove NAs, sum unique species record counts
+natSpecies$counts[is.na(natSpecies$counts)] <- 0
+natSpecies$counts <- as.numeric(as.character(natSpecies$counts))
 natSpecies <- aggregate(natSpecies$counts, by=list(natSpecies$species,natSpecies$sequenceID),sum)
 colnames(natSpecies) <- c("species", "sequenceID", "counts")
-natSpecies$counts[is.na(natSpecies$counts)] <- 0
-
-## Prepare to account for synonymous names
-nsrSynonyms$species <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Synonym)
-nsrSynonyms$Taxon <- gsub("([A-Za-z]+.[a-z]+).*", "\\1", nsrSynonyms$Taxon)
 
 ## Match and adopt synonymous names
-natSpecies <- left_join(natSpecies, nsrSynonyms[2:3],by=c('species'))
-natSpecies$Taxon <- coalesce(natSpecies$Taxon, natSpecies$species)
-natSpecies <- natSpecies[,c(4,3,2)]
-colnames(natSpecies)[1] <- "species_name"
+natSpecies <- left_join(natSpecies, nsrSynonyms[2:3], by=c("species"="synonym_name"))
+natSpecies <- left_join(natSpecies, nsrSpecies[1:2], by=c("species_id"))
+natSpecies$species_name <- coalesce(natSpecies$species_name, natSpecies$species)
+natSpecies <- natSpecies[,c(5,2,3)]
 
 ## Match species against the NSR
 natCoverage <- merge(natSpecies, nsrSpecies[c(2:3)], by="species_name")
@@ -215,32 +230,41 @@ treeOut <- taxizedb::classification(treeIn, db="ncbi", row=1, verbose=FALSE)
 taxdata = data.frame()
 for(x in 1:length(treeOut)){
   tryCatch({
-    c.tax_id=filter(treeOut[[x]], rank =="species")$id
-    c.parent_tax_id=filter(treeOut[[x]], rank =="genus")$id
-    c.rank=filter(treeOut[[x]], rank =="species")[[2]]
-    c.name=filter(treeOut[[x]], rank =="species")$name
+    for(i in 1:length(treeOut[[x]][[1]])) {
+      c.tax_id=filter(treeOut[[x]])$id[[i]]
+      c.parent_tax_id=NULL
+      c.rank=filter(treeOut[[x]])$rank[[i]]
+      c.name=filter(treeOut[[x]])$name[[i]]
 
-    row <- data.frame(cbind(tax_id=c.tax_id,parent_tax_id=c.parent_tax_id,
+      tryCatch({
+        c.parent_tax_id=filter(treeOut[[x]])$id[[i-1]]
+        }, error=function(e){c.parent_tax_id=NULL})
+      
+      row <- data.frame(cbind(tax_id=c.tax_id,parent_tax_id=c.parent_tax_id,
                             rank=c.rank, name=c.name))
-    taxdata <- bind_rows(taxdata, row)
+
+      # Check if record exists
+      if (nrow(merge(row,taxdata))==0) {
+        taxdata <- bind_rows(taxdata, row)
+      }
+    }
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
-taxdata <- unique(taxdata)
 
 ## Match hierarchies to NSR species names by taxon IDs
 ## (Accounting for use of synonymous names within NCBI)
 tree_ncbi <- left_join(taxdata, taxidOut, by=c("tax_id"="id"),
                        suffix=c("","_nsr")) %>%
   left_join(., nsrSpecies[1:2], by=c("name_nsr" = "species_name")) %>%
-  .[, c(1,6,2,3,4)] # Reaarange columns, drop 'name_nsr' column
-tree_ncbi <- tree_ncbi[complete.cases(tree_ncbi$species_id), ]
+  .[, c(1,6,4,2,3)] # Reaarange columns, drop 'name_nsr' column
+tree_ncbi <- unique(tree_ncbi)
 
 ## Write NCBI data to file
 write.csv(tree_ncbi, file=sprintf('%s/results/tree_ncbi.csv', REPO_HOME),
-          row.names=FALSE, fileEncoding="utf-8")
+          row.names=FALSE, fileEncoding="utf-8", na="")
 
 ## Clean up query variables
-rm(x, row, list = ls()[grep("^c.", ls())])
+rm(x, i, row, list = ls()[grep("^c.", ls())])
 ```
 
 ### Create data structure
@@ -319,6 +343,7 @@ Compute and draw reactive shiny filters through collapsible d3js tree. The serve
 the d3 collapsible tree library and its real-time layout. Data transferred back to Shiny is
 mapped to a series of logical expressions to create the reactive filters. Additional figures
 aid the visualization of data.
+
 
 ```{r tree-visualisation}
 ## Define tree data ----
