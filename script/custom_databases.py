@@ -136,11 +136,11 @@ def nsrSynonyms():
 
     # Write dictionary to file
     with io.open(par_path+"/results/nsr_synonyms.csv", "w", encoding="utf-8") as outfile:
-        outfile.write("synonym_name,taxon\n")
+        outfile.write("synonym_name,identification_reference,taxon_name,taxon_author\n")
         for key, value in synonymDict.items():
-            outfile.write('"%s","%s"' % (key, value))
+            outfile.write('"%s","%s","%s","%s"' % (' '.join(str(key).split()[:2]), ' '.join(str(key).split()[2:]),
+                                                   ' '.join(str(value).split()[:2]), ' '.join(str(value).split()[2:])))
             outfile.write("\n")
-
     return [*synonymDict], synonymDict
 
 

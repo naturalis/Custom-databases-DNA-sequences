@@ -7,6 +7,15 @@ CREATE TABLE "nsr_species" (
 	PRIMARY KEY("species_id")
 );
 
+CREATE TABLE "nsr_synonyms" (
+	"synonym_id" INTEGER NOT NULL,
+	"species_id" INTEGER NOT NULL,
+	"synonym_name" TEXT NOT NULL,
+	"identification_reference" TEXT,
+	PRIMARY KEY("synonym_id"),
+	FOREIGN KEY ("species_id") REFERENCES "nsr_species"("species_id")
+);
+
 CREATE TABLE "tree_nsr" (
 	"tax_id" TEXT NOT NULL,
 	"species_id" INTEGER NOT NULL,
@@ -24,11 +33,11 @@ CREATE TABLE "tree_nsr" (
 
 CREATE TABLE "tree_ncbi" (
 	"tax_id" INTEGER NOT NULL,
-	"species_id" INTEGER NOT NULL,
+	"species_id" INTEGER,
 	"parent_tax_id"	INTEGER,
-	"rank"	TEXT NOT NULL,
-	"name"	TEXT NOT NULL,
-	PRIMARY KEY("tax_id","species_id"),
+	"rank" TEXT NOT NULL,
+	"name" TEXT NOT NULL,
+	PRIMARY KEY("tax_id","species_id","parent_tax_id"),
 	FOREIGN KEY("species_id") REFERENCES "nsr_species"("species_id")
 );
 
