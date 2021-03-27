@@ -1,15 +1,25 @@
-
+<!-- Installation -->
 # Installation
+This file contains the requirements to run a local copy of this github repository.
 
-## Part 1: Downloading public sequence data of interest
+Clone the latest version from GitHub (recommended):  
+`git clone https://github.com/naturalis/Custom-databases-DNA-sequences`
 
-### Requirements
 
-* Python version 3.8.3
+<!-- Preparations -->
+### Preparations
+This project makes use of Python, R Markdown files, and a SQLite database, that requires you to have the following:
 
+- A working laptop (any major operating system)
+- [Python](https://www.python.org/) (version 3.8.3)
+- [R](https://www.r-project.org/) (version 4.0.3)
+- [RStudio](https://rstudio.com/products/rstudio/) (open source edition)
+- [SQLite browser](https://github.com/sqlitebrowser/sqlitebrowser)
+
+
+<!-- Dependencies -->
 ### Dependencies
-
-The following libraries are used:
+The following Python libraries are used:
 
   * argparse 1.1
   * csv 1.0
@@ -18,16 +28,10 @@ The following libraries are used:
   * urllib3 1.25.9
   * taxonparser 0.2.3
 
-## Part 2: Data classification & analyses
-
-### Requirements
-* R version 4.0.3
-
-### Dependencies
-
-The following packages are used:
+The following R packages are used:
 
   * rmarkdown 2.6
+  * data.table 1.14.0
   * taxizedb 0.3.0
   * myTAI 0.9.2
   * tidyr 1.1.2
@@ -35,18 +39,7 @@ The following packages are used:
   * DT 0.17
   * plyr 1.1.2
   * dplyr 1.0.3
+  * stringr 1.4.0
   * d3tree 0.2.2
   * billboarder 0.2.8
-
-
-
-  
-## Download the software
-
-Clone the latest version from GitHub (recommended):  
-`git clone https://github.com/naturalis/Custom-databases-DNA-sequences`  
-
-Or, download the latest source codes:
-* [Part 1](script/custom_databases.py)
-* [Part 2](script/custom_databases.Rmd)
-
+  * nbaR 0.1.0
