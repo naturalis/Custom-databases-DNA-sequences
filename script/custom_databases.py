@@ -44,7 +44,7 @@ parser.add_argument('-infile2', default="NSR_synonyms.csv",
                     help="Input file 2: NSR synonyms export")
 parser.add_argument('-outdir1', default=par_path+"/data/BOLD_exports",
                     help="Output folder 1: BOLD export directory")
-parser.add_argument('-outdir2', default=par_path+"/data/FASTA_files",
+parser.add_argument('-outdir2', default=par_path+"/data/TSV_files",
                     help="Output folder 2: Result data directory")
 parser.add_argument('-outfile1', default="match.tsv",
                     help="Output file 1: Matching records")
@@ -197,7 +197,7 @@ def taxonParser(taxon):
     return scientific_name
 
 
-def bold_extract(genera):
+def boldExtract(genera):
     """ Obtains public sequence data for a list of genera.
 
     Downloads records using BOLD's Public Data Portal API. Base URL for
@@ -229,7 +229,7 @@ def bold_extract(genera):
             fcont.write(r.data)
 
 
-def zip_directory(folder_path, zip_path):
+def zipDirectory(folder_path, zip_path):
     """ Compresses all BOLD output files into a zip file format. """
     # Create a ZipFile object
     with ZipFile(zip_path, mode='w') as zipObj:
@@ -244,7 +244,7 @@ def zip_directory(folder_path, zip_path):
                     zipObj.write(filePath, basename(filePath))
 
 
-def bold_nsr(species, synonyms, syn_dict, zip_path):
+def boldNSR(species, synonyms, syn_dict, zip_path):
     """ Match obtained sequence records to the reference species names.
 
     Iterates over every output file from BOLD and compares sequence data
@@ -278,7 +278,7 @@ def bold_nsr(species, synonyms, syn_dict, zip_path):
                                 bold_name = line['species_name'] + " " + bold_identification
                                 # Compare BOLD with NSR species names
                                 if (bold_name in species):
-                                    bold_output(args.outfile1, line)
+                                    boldOutput(args.outfile1, line)
                                 # Check for synonyms, apply accepted name
                                 elif (bold_name in synonyms):
                                     for synonym, taxon in syn_dict.items():
@@ -286,16 +286,16 @@ def bold_nsr(species, synonyms, syn_dict, zip_path):
                                         if synonym == line['species_name']:
                                             taxon = ' '.join(taxon.split()[:2])
                                             line['species_name'] = taxon
-                                            bold_output(args.outfile1, line)
+                                            boldOutput(args.outfile1, line)
                                 # Write missmatches to seperate file
                                 else:
-                                    bold_output(args.outfile2, line)
+                                    boldOutput(args.outfile2, line)
                     continue
                 else:
                     continue
 
 
-def bold_output(file, line):
+def boldOutput(file, line):
     """ Writes matching/non-matching records to respesctive file.
 
     Opens respective output file and appends the record. Ensures each
@@ -332,8 +332,8 @@ def main():
     taxonList = nsrTaxonomy()
     synonymList, synonymDict = nsrSynonyms()
     generaList = nsrGenera(taxonList, synonymList)
-    bold_extract(generaList)
-    zip_directory(args.outdir1, zip_path)
-    bold_nsr(taxonList, synonymList, synonymDict, zip_path)
+    boldExtract(generaList)
+    zipDirectory(args.outdir1, zip_path)
+    boldNSR(taxonList, synonymList, synonymDict, zip_path)
     print("Done")
 main()
