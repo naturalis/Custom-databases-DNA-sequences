@@ -27,7 +27,7 @@ CREATE TABLE "tree_nsr" (
 	"genus" TEXT NOT NULL,
 	"species" TEXT NOT NULL,
 	"identification_reference" TEXT NOT NULL,
-	PRIMARY KEY ("tax_id"),
+	PRIMARY KEY ("tax_id","species_id"),
 	FOREIGN KEY ("species_id") REFERENCES "nsr_species"("species_id")
 );
 
