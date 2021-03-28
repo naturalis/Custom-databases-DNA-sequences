@@ -13,7 +13,7 @@ To help assess the biodiversity of Dutch freshwater and saltwater areas, this pr
 - Assess the quality and reliability of public sequence data.
 
 ### Workflow
-![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Flowchart.png?raw=true)
+![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Workflow.png?raw=true)
 
 
 <!-- GETTING STARTED -->
