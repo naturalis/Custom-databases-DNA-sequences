@@ -4,15 +4,17 @@ Bioinformatics project [B19017-555](https://docs.google.com/spreadsheets/d/1AiUI
 
 
 <!-- ABOUT THE PROJECT -->
-## Project goals
+## Project overview
 
-To help assess the biodiversity of Dutch freshwater and saltwater areas, this project aims to develop a system to (periodically) obtain missing reference data from public databases, and perform an initial assessment of both its quality and reliability. An export from the Dutch Species Register (NSR) contains the scientific notation of species of interest, including synonyms and expected species, (see `data/NSR_exports/`). Obtaining curated reference material from the Naturalis Biodiversity Center and a snapshot of public sequence data, resulting data is used to:
+Project repository for the biodiversity assessment in Dutch freshwater and saltwater areas, presenting a management and reporting system for reference DNA barcodes. Contains source code (Python, R, and SQL) and data files. The overall layout is as follows:
 
-- Search out and visualize the overlap / gaps between the obtained Public Sequence Data (BOLD) and a reference provided by the Naturalis Biodiversity center, in correlation to the NSR.
-- Create a data structure capable of providing highly visual representations and at the same time maintaining integrity of each data set’s origin.
-- Assess the quality and reliability of public sequence data.
+- [script](script) - scripts in Python, R, and SQL
+- [data](data) - data, including exports from the NSR and BOLD
+- [results](results) - output files for the creation of custom databases
 
 ### Workflow
+A custom export from the Dutch Species Register (NSR) (see `data/NSR_exports/`) contains the taxonomic classification of species of interest, including synonyms and expected species. A selection of curated taxa enables the retrieval of BOLD specimen data and sequence records, Naturalis internal specimen records, names and phylogenetic lineages of the NCBI database, and higher NSR taxonomic classification. The resulting data sets provide a snapshot to assess the accuracy and reliability of BOLD’s reference data and to determine its overlap and discrepancies in comparison to Naturalis internal records. The underlying data structure combines the molecular data through NSR’s accepted names and links sequence information to its taxonomic data.
+
 ![Workflow](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/script/Workflow.png?raw=true)
 
 
