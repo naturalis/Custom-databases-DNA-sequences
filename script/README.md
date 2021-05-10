@@ -29,12 +29,11 @@ The python script is used to obtain public reference data from the BOLD database
 ### custom_databases.Rmd
 ------------------------
 The R markdown file performs the steps needed to:
-1. Search out and visualize the overlap / gaps between the obtained Public Sequence Data
-(BOLD) and a reference provided by the Naturalis Biodiversity center, in correlation to
-the NSR.
-2. Create a data structure capable of providing highly visual representations and at the
-same time maintaining integrity of each data set’s origin.
-3. Assess the quality and reliability of obtained public specimen data and sequence records.
+1. Obtain taxonomic information and Naturalis specimen records for selected taxa,
+2. Create a data structure capable of providing highly visual representations
+and at the same time maintaining integrity of each data set’s origin,
+3. Search out and visualize the overlap / discrepancies between obtained public
+reference data and records readily available at Naturalis Biodiversity Center.
 
 It retrieves the higher taxa of species from the NSR, as well as classification of all taxa present in the NCBI taxonomy database. Occurence records of available Naturalis specimen data are retrieved for all NSR taxa. Molecular data from all sources are linked through NSR’s accepted names and synonyms to create a more streamlined data structure. At last, a visualisation of collected taxanomic information is performed which computes and draws reactive shiny filters through a collapsible d3js tree. The R Markdown file is divided into multiple segments, each able to be run independently (providing the necessary data sets have previously been loaded into the environment). A description for each segement is provided with the first statements before its code block, supported by in-line documentation. The segments of code include:
 
