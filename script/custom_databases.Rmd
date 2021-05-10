@@ -11,12 +11,11 @@ Introduction
 
 The following R markdown file performs the steps needed to:
 
-1. Search out and visualize the overlap / gaps between the obtained Public Sequence Data
-(BOLD) and a reference provided by the Naturalis Biodiversity center, in correlation to
-the NSR.
-2. Create a data structure capable of providing highly visual representations and at the
-same time maintaining integrity of each data set’s origin.
-3. Assess the quality and reliability of obtained public sequence data.
+1. Obtain taxonomic information and Naturalis specimen records for selected taxa,
+2. Create a data structure capable of providing highly visual representations
+and at the same time maintaining integrity of each data set’s origin,
+3. Search out and visualize the overlap / discrepancies between obtained public
+reference data and records readily available at Naturalis Biodiversity Center.
 
 The following libraries need to be loaded:
 
@@ -53,22 +52,22 @@ REPO_HOME <- paste(dirname(getwd()), sep = "")
 We now load the following data sets:
 
 1. Reference Data Set (NSR),
-2. Obtained Public Sequence Data (BOLD),
+2. Obtained Public specimen records and sequence data (BOLD),
 3. List of Marker Codes,
 4. List of Public Databases
 
-Both the Reference Data Set (1) and the Obtained Public Sequence Data (2) are
+Both the reference data set (1) and the obtained public reference data (2) are
 output from the [script](../script/custom_databases.py)
 
 ```{r datasets, include=FALSE}
-## Load species and synonyms from the NSR files
+## Load species and synonyms from the NSR files, respectively
 nsrSpecies.file <- sprintf('%s/results/nsr_species.csv', REPO_HOME)
 nsrSpecies <- read.csv(nsrSpecies.file, encoding="UTF-8")
 
 nsrSynonyms.file <- sprintf('%s/results/nsr_synonyms.csv', REPO_HOME)
 nsrSynonyms <- read.csv(nsrSynonyms.file, encoding="UTF-8")
 
-## Load public sequence data
+## Load public reference data
 ## (Set missing values to na)
 bold.file <- sprintf('%s/data/FASTA_files/match.tsv', REPO_HOME)
 bold <- fread(bold.file, header=TRUE, sep="\t", na.strings="NA",
@@ -85,31 +84,41 @@ databases <- read.csv(databases.file, header=TRUE, sep=",")
 
 ### NSR Synonyms
 
-Match NSR Synonyms to corresponding species IDs
+To cover misalignments in identification between databases, known synonyms for
+NSR taxa are matched to their corresponding species IDs.
 
 ```{r nsrSynonyms, include=FALSE}
+## Merge respective taxon data with the synonym data set
+## Common values: respective species name and authority with year of publication
 nsrSynonyms <- inner_join(nsrSynonyms, nsrSpecies, by=c("taxon_name"="species_name",
-                                                       "taxon_author"="identification_reference"))
+           "taxon_author"="identification_reference"))
+
+## Add a unique identifier for each known synonym
+## Rearrange and remove obsolete columns
 nsrSynonyms <- within(nsrSynonyms, {
   synonym_id <- seq.int(nrow(nsrSynonyms))
 }) %>% .[,c(6,5,1,2)]
 
-## Update CSV file
+## Write changes to respective CSV file
 write.csv(nsrSynonyms, file=sprintf('%s/results/nsr_synonyms.csv', REPO_HOME),
           row.names=FALSE, fileEncoding="utf-8")
 ```
 
 ### NSR Backbone
 
-Ideally, a full taxonomic hierarchy of species would be used as a reference data set. As
-the NSR export only held the scientific names of all species of interest, the Netherlands
-Biodiversity API will be queried to obtain their higher taxa.
+To facilitate taxonomic estimation by lowest common ancestor approach, the 
+complete classification of species should ideally be present in a reference 
+taxonomic data set. As the NSR export only held the scientific names of all
+species of interest, the Netherlands Biodiversity API will be queried to obtain
+their higher classification.
 
 ```{r nsrBackbone, include=FALSE}
-## Taxonomy to retrieve the hierarchy from
+## Select species for taxon data retrieval
 nsrIn <- tolower(nsrSpecies[, "species_name"])
 
 ## Query NSR taxon records (duration: ~40m)
+## Method: nbaR 'taxon_query'
+## Parameters: NSR source code and list of selected species
 queryParams <- list("sourceSystem.code"="NSR")
 nsrSpecimens <- data.frame()
 for(x in 1:length(nsrIn)){
@@ -117,7 +126,7 @@ for(x in 1:length(nsrIn)){
   nsrSpecimens <- bind_rows(nsrSpecimens, taxon_query(queryParams))
 }
 
-## Access required taxonomic fields
+## Access and extract required taxonomic fields from retrieved taxon records
 nsrBackbone = data.frame()
 for(x in 1:nrow(nsrSpecimens)){
   tryCatch({
@@ -141,7 +150,7 @@ for(x in 1:nrow(nsrSpecimens)){
 ## Remove parenthesis around the authority for consistency across data sets
 nsrBackbone$identification_reference = gsub("[()]", "", nsrBackbone$identification_reference)
 
-## Match to species ID
+## Match taxonomic data to respective species ID, by species name
 nsrBackbone <- left_join(nsrBackbone, nsrSpecies[1:2], by=c("species"="species_name")) %>%
   .[,c(1,10,2,3,4,5,6,7,8,9)]
 nsrBackbone <- unique(nsrBackbone)
@@ -156,15 +165,18 @@ rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
 
 ### Naturalis Coverage
 
-To determine the overlap / gaps between the obtained public sequence data and our reference
-at the Naturalis Biodiversity Center, in relation to the NSR, we now query the Naturalis
-specimen records (using the Netherlands Biodiversity API) to obtain their coverage of species.
+To determine the overlap / discrepancies between the obtained public sequence data
+and the reference at Naturalis Biodiversity Center, in relation to the NSR, we now
+query the Naturalis specimen records (using the Netherlands Biodiversity API).
 
 ```{r natCoverage, include=FALSE}
-## Taxonomy to retrieve the hierarchy from
+## Select species for taxon data retrieval
+## Ensuring to select only binomial names
 natIn <- unique(gsub("([A-Za-z]+).*", "\\1", nsrSpecies$species_name))
 
 ## Query Naturalis specimen records (duration: ~20m)
+## Method: nbaR 'specimen_query'
+## Parameters: CRS source code and list of selected species
 queryParams <- list(queryParams <- list("sourceSystem.code"="CRS"))
 natSpecimens <- data.frame()
 for(x in 1:length(natIn)){
@@ -172,7 +184,7 @@ for(x in 1:length(natIn)){
   natSpecimens <- bind_rows(natSpecimens, specimen_query(queryParams))
 }
 
-## Access required taxonomic fields
+## Access and extract required data fields from retrieved specimen records
 natSpecies = data.frame()
 for(x in 1:nrow(natSpecimens)){
   tryCatch({
@@ -186,13 +198,18 @@ for(x in 1:nrow(natSpecimens)){
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-## Remove NAs, sum unique species record counts
+## Remove NAs
 natSpecies$counts[is.na(natSpecies$counts)] <- 0
+
+## Update data type and sum unique species record counts
 natSpecies$counts <- as.numeric(as.character(natSpecies$counts))
-natSpecies <- aggregate(natSpecies$counts, by=list(natSpecies$species,natSpecies$sequenceID),sum)
+natSpecies <- aggregate(natSpecies$counts,
+                        by=list(natSpecies$species,natSpecies$sequenceID),sum)
+
+## Rename columns
 colnames(natSpecies) <- c("species", "sequenceID", "counts")
 
-## Match and adopt synonymous names
+## Adopt respective taxonomic unit for synonymous names
 natSpecies <- left_join(natSpecies, nsrSynonyms[2:3], by=c("species"="synonym_name"))
 natSpecies <- left_join(natSpecies, nsrSpecies[1:2], by=c("species_id"))
 natSpecies$species_name <- coalesce(natSpecies$species_name, natSpecies$species)
@@ -207,8 +224,9 @@ rm(x, row, queryParams, list = ls()[grep("^c.", ls())])
 
 ### Additional taxonomy
 
-The ability to divert to another taxonomy could prove useful in certain situations.
-Classification of species will hence be extrated from a database of choice for later use.
+The ability to divert to a different backbone provides additional insight into a
+specimens classification or serves as a filter for specific taxa (e.g., marine: WoRMS).
+Additional taxonomic hierarchies can be retrieved from various databases.
 
 ```{r tree_ncbi, include=FALSE}
 ## Download taxonomic database (options: ncbi, itis, gbif, col, wfo)
@@ -270,27 +288,30 @@ rm(x, i, row, list = ls()[grep("^c.", ls())])
 
 ### Create data structure
 
-Now we will consolidate the various data sets, creating a more streamlined
-data structure while maintaining the integrity of each data set’s origin.
+Following NSR’s species names (and known synonyms) for the identification of all
+molecular data, the underlying data structure combines the molecular data through
+NSR’s accepted species names and links sequence information to its taxonomic data.
 
 ```{r species_markers, include=FALSE}
-## Match the NSR species names with the obtained (BOLD) public sequence data
+## Match the NSR species names with the obtained (BOLD) public reference data
 ## Subsequently, fetch the associated ID for each markercode
 species_markers <- right_join(nsrSpecies, bold[c("species_name","markercode","sequenceID",
                                                  "identification_reference")],
                               by=c("species_name", "identification_reference")) %>%
   right_join(., markers, by=c("markercode" = "marker_name"))
+
+## Asign database ID and update data type of the sequenceID
 species_markers$database_id <- 1
 species_markers$sequenceID <- as.character(species_markers$sequenceID)
 
-## Prepare Naturalis merge
+## Prepare merge with Naturalis records by aligning data
 naturalis <- left_join(natCoverage, nsrSpecies, by=c("species_name",
                                                      "identification_reference"))
 naturalis$database_id <- 0
 naturalis$marker_id <- 0
 naturalis$counts <- NULL
 
-## Merge Naturalis records
+## Merge BOLD and Naturalis records
 species_markers <- merge(species_markers, naturalis,
                          by=c("species_id","identification_reference","sequenceID",
                               "database_id","marker_id","species_name"), all=TRUE)
@@ -309,12 +330,13 @@ write.csv(species_markers, file=sprintf('%s/results/species_markers.csv', REPO_H
 
 ### Load Tree
 
-To perform an analyses on our species we now load the backbone of the NSR. This is their
-complete tree, populated with our collected data. Here where we seek out overlap / gaps
-between Naturalis and our obtained Public Sequence Data .
+To perform an analyses on our species we now load the backbone of the NSR. This 
+is their complete tree, populated with our collected data. Here where we seek
+out overlap / gaps between Naturalis and our obtained Public Sequence Data.
 
 ```{r tree, include=FALSE}
 ## Get classification for each obtained record
+## Subsequently, fetch the associated marker and database names for each record
 tree <- left_join(nsrSpecies[1], nsrBackbone[c(2:9)], by=c("species_id")) %>%
   left_join(., species_markers[c("species_id","database_id", "marker_id")],
             by=c("species_id")) %>%
@@ -340,10 +362,11 @@ save.image(sprintf('%s/.RData', REPO_HOME))
 
 ### Perform visualisation
 
-Compute and draw reactive shiny filters through collapsible d3js tree. The server observes
-the d3 collapsible tree library and its real-time layout. Data transferred back to Shiny is
-mapped to a series of logical expressions to create the reactive filters. Additional figures
-aid the visualization of data.
+A dynamic visualization of this complex data set is presented by a collapsible
+Reingold-Tilford tree diagram. Through Shiny, the server observes the d3
+collapsible tree library and its real-time layout. Data transferred back to Shiny
+is mapped to a series of logical expressions to create reactive filters.
+Various charts visualize the number of occurrence records and its relevant data.
 
 ```{r tree-visualisation}
 ## Define tree data ----
@@ -529,8 +552,6 @@ server <- function(input, output, session) {
       bb_piechart(data = markerDF) %>%
       bb_labs(title = "Share of markers (BOLD)")
   })
-  
-  
 
 }
 
