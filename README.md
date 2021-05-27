@@ -12,6 +12,8 @@ Project repository for the biodiversity assessment in Dutch freshwater and saltw
 - [data](data) - data, including exports from the NSR and BOLD
 - [results](results) - output files for the creation of custom databases
 
+The paper accompanying this project can be found [here](https://github.com/naturalis/Custom-databases-DNA-sequences/blob/master/Custom%20Databases%20DNA%20Sequences.pdf)
+
 ### Workflow
 A custom export from the Dutch Species Register (NSR) (see `data/NSR_exports/`) contains the taxonomic classification of species of interest, including synonyms and expected species. A selection of curated taxa enables the retrieval of BOLD specimen data and sequence records, Naturalis internal specimen records, names and phylogenetic lineages of the NCBI database, and higher NSR taxonomic classification. The resulting data sets provide a snapshot to assess the accuracy and reliability of BOLD’s reference data and to determine its overlap and discrepancies in comparison to Naturalis internal records. The underlying data structure combines the molecular data through NSR’s accepted names and links sequence information to its taxonomic data.
 
@@ -91,6 +93,11 @@ See the [changelog](CHANGES.md) for a list of all notable changes made to the pr
 ## License
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+
+<!-- Acknowledgements -->
+## Acknowledgements
+Special thanks to Rutger Vos as supervisor on this project, Berry van der Hoorn as applicant/supervisor, and Dick Groenenberg, Kevin Beentjes, and Oscar Vorst as advisory group of Naturalis Biodiversity Center.
 
 
 <!-- Additional remarks -->
